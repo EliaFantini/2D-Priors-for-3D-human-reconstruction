@@ -1,0 +1,600 @@
+import sys
+import os
+
+
+from rembg.bg import remove
+import numpy as np
+import io
+import cv2
+from PIL import Image
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+ROOT_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+from rembg.session_factory import new_session
+
+import cv2
+import time
+import json
+import numpy as np
+from PIL import Image
+import torch
+from torch.utils.data import DataLoader
+from torchvision.models import detection
+
+from lib.options import BaseOptions
+from lib.mesh_util import *
+from lib.sample_util import *
+from lib.train_util import *
+from lib.model import *
+
+from PIL import Image
+import torchvision.transforms as transforms
+import glob
+import tqdm
+
+import trimesh
+
+# get options
+opt = BaseOptions().parse()
+
+class MeshEvaluator:
+    _normal_render = None
+
+    def __init__(self):
+        pass
+
+    def set_mesh(self, src_path, tgt_path, scale_factor=1.0, offset=0):
+        self.src_mesh = trimesh.load(src_path)
+        self.tgt_mesh = trimesh.load(tgt_path)
+
+        self.scale_factor = scale_factor
+        self.offset = offset
+
+
+    def get_chamfer_dist(self, num_samples=10000):
+        # Chamfer
+        src_surf_pts, _ = trimesh.sample.sample_surface(self.src_mesh, num_samples)
+        tgt_surf_pts, _ = trimesh.sample.sample_surface(self.tgt_mesh, num_samples)
+
+        _, src_tgt_dist, _ = trimesh.proximity.closest_point(self.tgt_mesh, src_surf_pts)
+        _, tgt_src_dist, _ = trimesh.proximity.closest_point(self.src_mesh, tgt_surf_pts)
+
+        src_tgt_dist[np.isnan(src_tgt_dist)] = 0
+        tgt_src_dist[np.isnan(tgt_src_dist)] = 0
+
+        src_tgt_dist = src_tgt_dist.mean()
+        tgt_src_dist = tgt_src_dist.mean()
+
+        chamfer_dist = (src_tgt_dist + tgt_src_dist) / 2
+
+        return chamfer_dist
+
+    def get_surface_dist(self, num_samples=10000):
+        # P2S
+        src_surf_pts, _ = trimesh.sample.sample_surface(self.src_mesh, num_samples)
+
+        _, src_tgt_dist, _ = trimesh.proximity.closest_point(self.tgt_mesh, src_surf_pts)
+
+        src_tgt_dist[np.isnan(src_tgt_dist)] = 0
+
+        src_tgt_dist = src_tgt_dist.mean()
+
+        return src_tgt_dist
+
+
+class Evaluator:
+    def __init__(self, opt, projection_mode='orthogonal'):
+        self.opt = opt
+        self.load_size = self.opt.loadSize
+        self.to_tensor = transforms.Compose([
+            transforms.Resize(self.load_size),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+        # set cuda
+        cuda = torch.device('cuda:%d' % opt.gpu_id) if torch.cuda.is_available() else torch.device('cpu')
+
+        # create net
+        netG = HGPIFuNet(opt, projection_mode).to(device=cuda)
+        print('Using Network: ', netG.name)
+
+        if opt.load_netG_checkpoint_path:
+            
+            netG.load_state_dict(torch.load(opt.load_netG_checkpoint_path, map_location=cuda))
+            print('net G loaded ...', opt.load_netC_checkpoint_path)
+
+        if opt.load_netC_checkpoint_path is not None:
+            print('loading for net C ...', opt.load_netC_checkpoint_path)
+            netC = ResBlkPIFuNet(opt).to(device=cuda)
+            netC.load_state_dict(torch.load(opt.load_netC_checkpoint_path, map_location=cuda))
+        else:
+            netC = None
+
+        os.makedirs(opt.results_path, exist_ok=True)
+        os.makedirs('%s/%s' % (opt.results_path, opt.name), exist_ok=True)
+
+        opt_log = os.path.join(opt.results_path, opt.name, 'opt.txt')
+        with open(opt_log, 'w') as outfile:
+            outfile.write(json.dumps(vars(opt), indent=2))
+
+        self.cuda = cuda
+        self.netG = netG
+        self.netC = netC
+
+        # def constants(self):# This script is borrowed and extended from https://github.com/nkolot/SPIN/blob/master/constants.py
+        self.FOCAL_LENGTH = 5000.
+        self.IMG_RES = 224
+
+        # Mean and standard deviation for normalizing input image
+        self.IMG_NORM_MEAN = [0.485, 0.456, 0.406]
+        self.IMG_NORM_STD = [0.229, 0.224, 0.225]
+        """
+        We create a superset of joints containing the OpenPose joints together with the ones that each dataset provides.
+        We keep a superset of 24 joints such that we include all joints from every dataset.
+        If a dataset doesn't provide annotations for a specific joint, we simply ignore it.
+        The joints used here are the following:
+        """
+        self.JOINT_NAMES = [
+            # 25 OpenPose joints (in the order provided by OpenPose)
+            'OP Nose',
+            'OP Neck',
+            'OP RShoulder',
+            'OP RElbow',
+            'OP RWrist',
+            'OP LShoulder',
+            'OP LElbow',
+            'OP LWrist',
+            'OP MidHip',
+            'OP RHip',
+            'OP RKnee',
+            'OP RAnkle',
+            'OP LHip',
+            'OP LKnee',
+            'OP LAnkle',
+            'OP REye',
+            'OP LEye',
+            'OP REar',
+            'OP LEar',
+            'OP LBigToe',
+            'OP LSmallToe',
+            'OP LHeel',
+            'OP RBigToe',
+            'OP RSmallToe',
+            'OP RHeel',
+            # 24 Ground Truth joints (superset of joints from different datasets)
+            'Right Ankle',
+            'Right Knee',
+            'Right Hip',    # 2
+            'Left Hip',
+            'Left Knee',    # 4
+            'Left Ankle',
+            'Right Wrist',    # 6
+            'Right Elbow',
+            'Right Shoulder',    # 8
+            'Left Shoulder',
+            'Left Elbow',    # 10
+            'Left Wrist',
+            'Neck (LSP)',    # 12
+            'Top of Head (LSP)',
+            'Pelvis (MPII)',    # 14
+            'Thorax (MPII)',
+            'Spine (H36M)',    # 16
+            'Jaw (H36M)',
+            'Head (H36M)',    # 18
+            'Nose',
+            'Left Eye',
+            'Right Eye',
+            'Left Ear',
+            'Right Ear'
+        ]
+
+        # Dict containing the joints in numerical order
+        self.JOINT_IDS = {self.JOINT_NAMES[i]: i for i in range(len(self.JOINT_NAMES))}
+
+        # Map joints to SMPL joints
+        self.JOINT_MAP = {
+            'OP Nose': 24,
+            'OP Neck': 12,
+            'OP RShoulder': 17,
+            'OP RElbow': 19,
+            'OP RWrist': 21,
+            'OP LShoulder': 16,
+            'OP LElbow': 18,
+            'OP LWrist': 20,
+            'OP MidHip': 0,
+            'OP RHip': 2,
+            'OP RKnee': 5,
+            'OP RAnkle': 8,
+            'OP LHip': 1,
+            'OP LKnee': 4,
+            'OP LAnkle': 7,
+            'OP REye': 25,
+            'OP LEye': 26,
+            'OP REar': 27,
+            'OP LEar': 28,
+            'OP LBigToe': 29,
+            'OP LSmallToe': 30,
+            'OP LHeel': 31,
+            'OP RBigToe': 32,
+            'OP RSmallToe': 33,
+            'OP RHeel': 34,
+            'Right Ankle': 8,
+            'Right Knee': 5,
+            'Right Hip': 45,
+            'Left Hip': 46,
+            'Left Knee': 4,
+            'Left Ankle': 7,
+            'Right Wrist': 21,
+            'Right Elbow': 19,
+            'Right Shoulder': 17,
+            'Left Shoulder': 16,
+            'Left Elbow': 18,
+            'Left Wrist': 20,
+            'Neck (LSP)': 47,
+            'Top of Head (LSP)': 48,
+            'Pelvis (MPII)': 49,
+            'Thorax (MPII)': 50,
+            'Spine (H36M)': 51,
+            'Jaw (H36M)': 52,
+            'Head (H36M)': 53,
+            'Nose': 24,
+            'Left Eye': 26,
+            'Right Eye': 25,
+            'Left Ear': 28,
+            'Right Ear': 27
+        }
+
+        # Joint selectors
+        # Indices to get the 14 LSP joints from the 17 H36M joints
+        self.H36M_TO_J17 = [6, 5, 4, 1, 2, 3, 16, 15, 14, 11, 12, 13, 8, 10, 0, 7, 9]
+        self.H36M_TO_J14 = self.H36M_TO_J17[:14]
+        # Indices to get the 14 LSP joints from the ground truth joints
+        self.J24_TO_J17 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 14, 16, 17]
+        self.J24_TO_J14 = self.J24_TO_J17[:14]
+        self.J24_TO_J19 = self.J24_TO_J17[:14] + [19, 20, 21, 22, 23]
+        self.J24_TO_JCOCO = [19, 20, 21, 22, 23, 9, 8, 10, 7, 11, 6, 3, 2, 4, 1, 5, 0]
+
+        # Permutation of SMPL pose parameters when flipping the shape
+        self.SMPL_JOINTS_FLIP_PERM = [
+            0, 2, 1, 3, 5, 4, 6, 8, 7, 9, 11, 10, 12, 14, 13, 15, 17, 16, 19, 18, 21, 20, 23, 22
+        ]
+        self.SMPL_POSE_FLIP_PERM = []
+        for i in self.SMPL_JOINTS_FLIP_PERM:
+            self.SMPL_POSE_FLIP_PERM.append(3 * i)
+            self.SMPL_POSE_FLIP_PERM.append(3 * i + 1)
+            self.SMPL_POSE_FLIP_PERM.append(3 * i + 2)
+        # Permutation indices for the 24 ground truth joints
+        self.J24_FLIP_PERM = [
+            5, 4, 3, 2, 1, 0, 11, 10, 9, 8, 7, 6, 12, 13, 14, 15, 16, 17, 18, 19, 21, 20, 23, 22
+        ]
+        # Permutation indices for the full set of 49 joints
+        self.J49_FLIP_PERM = [0, 1, 5, 6, 7, 2, 3, 4, 8, 12, 13, 14, 9, 10, 11, 16, 15, 18, 17, 22, 23, 24, 19, 20, 21]\
+            + [25+i for i in self.J24_FLIP_PERM]
+        self.SMPL_J49_FLIP_PERM = [0, 1, 5, 6, 7, 2, 3, 4, 8, 12, 13, 14, 9, 10, 11, 16, 15, 18, 17, 22, 23, 24, 19, 20, 21]\
+            + [25+i for i in self.SMPL_JOINTS_FLIP_PERM]
+
+    def get_transformer(self, input_res):
+
+        image_to_tensor = transforms.Compose(
+            [
+                transforms.Resize(input_res),
+                transforms.ToTensor(),
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            ]
+        )
+
+        mask_to_tensor = transforms.Compose(
+            [
+                transforms.Resize(input_res),
+                transforms.ToTensor(),
+                transforms.Normalize((0.0, ), (1.0, ))
+            ]
+        )
+
+        image_to_pymaf_tensor = transforms.Compose(
+            [
+                transforms.Resize(size=224),
+                transforms.Normalize(mean=self.IMG_NORM_MEAN, std=self.IMG_NORM_STD)
+            ]
+        )
+
+        image_to_pixie_tensor = transforms.Compose([transforms.Resize(224)])
+
+        def image_to_hybrik_tensor(img):
+            # mean
+            img[0].add_(-0.406)
+            img[1].add_(-0.457)
+            img[2].add_(-0.480)
+
+            # std
+            img[0].div_(0.225)
+            img[1].div_(0.224)
+            img[2].div_(0.229)
+            return img
+
+        return [
+            image_to_tensor, mask_to_tensor, image_to_pymaf_tensor, image_to_pixie_tensor,
+            image_to_hybrik_tensor
+        ]
+
+    def load_img(self, img_file):
+
+        if img_file.endswith("exr"):
+            img = cv2.imread(img_file, cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)  
+        else :
+            img = cv2.imread(img_file, cv2.IMREAD_UNCHANGED)
+
+        # considering non 8-bit image
+        if img.dtype != np.uint8 :
+            img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+        
+        if len(img.shape) == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+
+        if not img_file.endswith("png"):
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        else:
+            img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
+
+        return img
+
+
+    def get_affine_matrix(self, center, translate, scale):
+        cx, cy = center
+        tx, ty = translate
+
+        M = [1, 0, 0, 0, 1, 0]
+        M = [x * scale for x in M]
+
+        # Apply translation and of center translation: RSS * C^-1
+        M[2] += M[0] * (-cx) + M[1] * (-cy)
+        M[5] += M[3] * (-cx) + M[4] * (-cy)
+
+        # Apply center translation: T * C * RSS * C^-1
+        M[2] += cx + tx
+        M[5] += cy + ty
+        return M
+
+    def aug_matrix(self, w1, h1, w2, h2):
+        dx = (w2 - w1) / 2.0
+        dy = (h2 - h1) / 2.0
+
+        matrix_trans = np.array([[1.0, 0, dx], [0, 1.0, dy], [0, 0, 1.0]])
+
+        scale = np.min([float(w2) / w1, float(h2) / h1])
+
+        M = self.get_affine_matrix(center=(w2 / 2.0, h2 / 2.0), translate=(0, 0), scale=scale)
+
+        M = np.array(M + [0., 0., 1.]).reshape(3, 3)
+        M = M.dot(matrix_trans)
+
+        return M
+
+    def crop_for_hybrik(self, img, center, scale):
+        inp_h, inp_w = (256, 256)
+        trans = self.get_affine_transform(center, scale, 0, [inp_w, inp_h])
+        new_img = cv2.warpAffine(img, trans, (int(inp_w), int(inp_h)), flags=cv2.INTER_LINEAR)
+        return new_img
+
+
+    def get_affine_transform(
+        self, center, scale, rot, output_size, shift=np.array([0, 0], dtype=np.float32), inv=0
+    ):
+        def get_dir(src_point, rot_rad):
+            """Rotate the point by `rot_rad` degree."""
+            sn, cs = np.sin(rot_rad), np.cos(rot_rad)
+
+            src_result = [0, 0]
+            src_result[0] = src_point[0] * cs - src_point[1] * sn
+            src_result[1] = src_point[0] * sn + src_point[1] * cs
+
+            return src_result
+
+        def get_3rd_point(a, b):
+            """Return vector c that perpendicular to (a - b)."""
+            direct = a - b
+            return b + np.array([-direct[1], direct[0]], dtype=np.float32)
+
+        if not isinstance(scale, np.ndarray) and not isinstance(scale, list):
+            scale = np.array([scale, scale])
+
+        scale_tmp = scale
+        src_w = scale_tmp[0]
+        dst_w = output_size[0]
+        dst_h = output_size[1]
+
+        rot_rad = np.pi * rot / 180
+        src_dir = get_dir([0, src_w * -0.5], rot_rad)
+        dst_dir = np.array([0, dst_w * -0.5], np.float32)
+
+        src = np.zeros((3, 2), dtype=np.float32)
+        dst = np.zeros((3, 2), dtype=np.float32)
+        src[0, :] = center + scale_tmp * shift
+        src[1, :] = center + src_dir + scale_tmp * shift
+        dst[0, :] = [dst_w * 0.5, dst_h * 0.5]
+        dst[1, :] = np.array([dst_w * 0.5, dst_h * 0.5]) + dst_dir
+
+        src[2:, :] = get_3rd_point(src[0, :], src[1, :])
+        dst[2:, :] = get_3rd_point(dst[0, :], dst[1, :])
+
+        if inv:
+            trans = cv2.getAffineTransform(np.float32(dst), np.float32(src))
+        else:
+            trans = cv2.getAffineTransform(np.float32(src), np.float32(dst))
+
+        return trans
+
+    def create_mask(self, img_file, hps_type='hybrik', input_res=512):
+        """Read image, do preprocessing and possibly crop it according to the bounding box.
+        If there are bounding box annotations, use them to crop the image.
+        If no bounding box is specified but openpose detections are available, use them to get the bounding box.
+        """
+
+        [
+            image_to_tensor, mask_to_tensor, image_to_pymaf_tensor, image_to_pixie_tensor,
+            image_to_hybrik_tensor
+        ] = self.get_transformer(input_res)
+
+        img_ori = self.load_img(img_file)
+
+        in_height, in_width, _ = img_ori.shape
+        M = self.aug_matrix(in_width, in_height, input_res * 2, input_res * 2)
+
+        # from rectangle to square
+        img_for_crop = cv2.warpAffine(
+            img_ori, M[0:2, :], (input_res * 2, input_res * 2), flags=cv2.INTER_CUBIC
+        )
+
+        # detection for bbox
+        detector = detection.maskrcnn_resnet50_fpn(pretrained=True)
+        detector.eval()
+        predictions = detector([torch.from_numpy(img_for_crop).permute(2, 0, 1) / 255.])[0]
+        human_ids = torch.where(
+            predictions["scores"] == predictions["scores"][predictions['labels'] == 1].max()
+        )
+        bbox = predictions["boxes"][human_ids, :].flatten().detach().cpu().numpy()
+
+        width = bbox[2] - bbox[0]
+        height = bbox[3] - bbox[1]
+        center = np.array([(bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0])
+
+        scale = max(height, width) / 180
+
+        # if hps_type == 'hybrik':
+        img_np = self.crop_for_hybrik(img_for_crop, center, np.array([scale * 180, scale * 180]))
+        # else:
+        #     img_np, cropping_parameters = crop(img_for_crop, center, scale, (input_res, input_res))
+
+        img_pil = Image.fromarray(remove(img_np, post_process_mask=True, session=new_session("u2net")))
+        img_mask = torch.tensor(1.0) - (mask_to_tensor(img_pil.split()[-1]) < torch.tensor(0.5)).float()
+
+        return img_mask
+
+    def load_image(self, image_path): # , mask_path):
+        # Name
+        img_name = os.path.splitext(os.path.basename(image_path))[0]
+        # Calib
+        B_MIN = np.array([-1, -1, -1])
+        B_MAX = np.array([1, 1, 1])
+        projection_matrix = np.identity(4)
+        projection_matrix[1, 1] = -1
+        calib = torch.Tensor(projection_matrix).float()
+        # Mask
+        # mask = Image.open(mask_path).convert('L')
+        # mask = transforms.Resize(self.load_size)(mask)
+        # mask = transforms.ToTensor()(mask).float()
+        # image
+        image = Image.open(image_path).convert('RGB')
+        mask = remove(image, alpha_matting=True, session=new_session("u2netP"))
+        # from mask only get the alpha channel
+        mask = mask.split()[-1]
+        
+        # mask.save("/home/fantini/PIFu/out.png")
+        image = self.to_tensor(image)
+        
+        
+        mask = transforms.Resize(self.load_size)(mask)
+        
+        mask = transforms.ToTensor()(mask).float()
+        print(mask.shape)
+
+        #mask = self.create_mask(image_path)
+        image = mask.expand_as(image) * image
+        return {
+            'name': img_name,
+            'img': image.unsqueeze(0),
+            'calib': calib.unsqueeze(0),
+            'mask': mask.unsqueeze(0),
+            'b_min': B_MIN,
+            'b_max': B_MAX,
+        }
+
+    def eval(self, data, use_octree=False):
+        '''
+        Evaluate a data point
+        :param data: a dict containing at least ['name'], ['image'], ['calib'], ['b_min'] and ['b_max'] tensors.
+        :return:
+        '''
+        opt = self.opt
+        with torch.no_grad():
+            self.netG.eval()
+            if self.netC:
+                self.netC.eval()
+            save_path = '%s/%s/result_%s.obj' % ("/scratch/izar/ckli/corruptions_benchmark/all/results_24", opt.name, data['name'])
+            if self.netC:
+                gen_mesh_color(opt, self.netG, self.netC, self.cuda, data, save_path, use_octree=use_octree)
+            else:
+                gen_mesh(opt, self.netG, self.cuda, data, save_path, use_octree=use_octree)
+
+
+if __name__ == '__main__':
+    evaluator = Evaluator(opt)
+    mesh_evaluator = MeshEvaluator()
+    mesh_evaluator.__init__()
+    
+
+    all_files = glob.glob(os.path.join(opt.test_folder_path, '*'))
+    eval_objs = ['0029', '0031', '0049', '0101', '0109'] # hard coded for now; testing on 5 objects
+    test_images = [f for f in all_files if ('png' in f or 'jpg' in f) and (not 'mask' in f) and any(obj in f for obj in eval_objs)]
+    rendered_images = []
+    mask_images = []
+
+    test_images.sort()
+
+    print("num; ", len(test_images))
+
+
+    total_vals = []
+    items = []
+ 
+    results_path = "/scratch/izar/ckli/corruptions_benchmark/all/results_24"
+
+    for image_path in tqdm.tqdm(test_images): # , test_masks)):
+            
+        print(image_path) # , mask_path)
+        data = evaluator.load_image(image_path) # , mask_path)
+        evaluator.eval(data, True)
+        # metrics calculation
+        reconstructed_obj_path = '%s/%s/result_%s.obj' % (results_path, opt.name, data['name'])
+        # from all_files get the obj file with the same code as the image, getting it by splitting the path name by "_" and getting the -3 element
+        test_obj = [f for f in all_files if 'obj' in f and image_path.split("_")[-3] in f][0]
+        print(reconstructed_obj_path)
+        print(test_obj)
+        mesh_evaluator.set_mesh(reconstructed_obj_path, test_obj)
+        vals = []
+        vals.append(0.1 * mesh_evaluator.get_chamfer_dist(500))
+        vals.append(0.1 * mesh_evaluator.get_surface_dist(500))
+        item = {
+                'name': '%s' % (image_path),
+                'vals': vals
+            }
+        total_vals.append(vals)
+        items.append(item)
+        np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
+        np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
+        
+    # for image_path in tqdm.tqdm(test_images): # , test_masks)):
+            
+    #     print(image_path) # , mask_path)
+    #     #data = evaluator.load_image(image_path) # , mask_path)
+    #     # metrics calculation
+    #     reconstructed_obj_path = '%s/%s/result_%s.obj' % (results_path, opt.name,  os.path.splitext(os.path.basename(image_path))[0])
+    #     # from all_files get the obj file with the same code as the image, getting it by splitting the path name by "_" and getting the -3 element
+    #     test_obj = [f for f in all_files if 'obj' in f and image_path.split("_")[-3] in f][0]
+    #     print(reconstructed_obj_path)
+    #     print(test_obj)
+    #     mesh_evaluator.set_mesh(reconstructed_obj_path, test_obj)
+    #     vals = []
+    #     vals.append( mesh_evaluator.get_chamfer_dist(500))
+    #     vals.append( mesh_evaluator.get_surface_dist(500))
+    #     item = {
+    #             'name': '%s' % (image_path),
+    #             'vals': vals
+    #         }
+    #     total_vals.append(vals)
+    #     items.append(item)
+    #     np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
+    #     np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
