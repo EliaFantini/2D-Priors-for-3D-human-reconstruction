@@ -16,10 +16,10 @@ MLP_DIM_COLOR='513 1024 512 256 128 3'
 # NOTE: one can change here to reconstruct mesh in a different resolution.
 VOL_RES=256
 
-CHECKPOINTS_NETG_PATH='/scratch/izar/ckli/PIFu/checkpoints/24sample/netG_latest'
-CHECKPOINTS_NETC_PATH='./checkpoints/net_C'
+CHECKPOINTS_NETG_PATH='/home/fantini/PIFu/checkpoints/net_G'
+CHECKPOINTS_NETC_PATH='/home/fantini/PIFu/checkpoints/net_C'
 
-TEST_FOLDER_PATH='/scratch/izar/ckli/corruptions_benchmark/all'
+TEST_FOLDER_PATH='/scratch/izar/fantini/final'
 
 # command
 CUDA_VISIBLE_DEVICES=${GPU_ID} python ./apps/eval.py \

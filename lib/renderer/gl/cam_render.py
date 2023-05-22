@@ -4,7 +4,7 @@ GLUT = None
 
 class CamRender(Render):
     def __init__(self, width=1600, height=1200, name='Cam Renderer',
-                 program_files=['simple.fs', 'simple.vs'], color_size=1, ms_rate=1, egl=False):
+                 program_files=['simple.fs', 'simple.vs'], color_size=1, ms_rate=1, egl=True):
         Render.__init__(self, width, height, name, program_files, color_size, ms_rate=ms_rate, egl=egl)
         self.camera = None
 
@@ -17,6 +17,10 @@ class CamRender(Render):
     def set_camera(self, camera):
         self.camera = camera
         self.projection_matrix, self.model_view_matrix = camera.get_gl_matrix()
+
+    def set_matrices(self, projection, modelview):
+        self.projection_matrix = projection
+        self.model_view_matrix = modelview
 
     def keyboard(self, key, x, y):
         # up
