@@ -77,6 +77,7 @@ class HGFilter(nn.Module):
         elif self.opt.hg_down == 'conv128':
             self.conv2 = ConvBlock(64, 128, self.opt.norm)
             self.down_conv2 = nn.Conv2d(128, 128, kernel_size=3, stride=2, padding=1)
+        # default is ave_pool
         elif self.opt.hg_down == 'ave_pool':
             self.conv2 = ConvBlock(64, 128, self.opt.norm)
         else:

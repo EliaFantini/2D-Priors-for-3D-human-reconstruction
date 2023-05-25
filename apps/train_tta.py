@@ -63,8 +63,9 @@ def train(opt, adapt_sample=5):
         netG.eval()
 
     # load checkpoints before test time adaptation
-    print('loading for net G ...', opt.load_netG_checkpoint_path)
-    netG.load_state_dict(torch.load(opt.load_netG_checkpoint_path, map_location=cuda))
+    if opt.load_netG_checkpoint_path is not None:
+        print('loading for net G ...', opt.load_netG_checkpoint_path)
+        netG.load_state_dict(torch.load(opt.load_netG_checkpoint_path, map_location=cuda))
 
     if opt.continue_train:
         if opt.resume_epoch < 0:
