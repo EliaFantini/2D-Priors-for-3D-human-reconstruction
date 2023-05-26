@@ -251,7 +251,7 @@ def init_weights(net, init_type='normal', init_gain=0.02):
     net.apply(init_func)  # apply the initialization function <init_func>
 
 
-def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
+def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=''):
     """Initialize a network: 1. register CPU/GPU device (with multi-GPU support); 2. initialize the network weights
     Parameters:
         net (network)      -- the network to be initialized
@@ -261,6 +261,7 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
 
     Return an initialized network.
     """
+    gpu_ids = [int(x) for x in gpu_ids.split(',')]
     if len(gpu_ids) > 0:
         assert (torch.cuda.is_available())
         net.to(gpu_ids[0])

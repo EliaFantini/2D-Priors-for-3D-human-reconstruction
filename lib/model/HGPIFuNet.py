@@ -9,22 +9,7 @@ from ..net_util import init_net
 import clip
 import pdb
 from torchvision import transforms
-
-
-class CLIP_Transform(nn.Module):
-    def __init__(self, hidden_dim):
-        super().__init__()
-        # Project to a lower resolution feature map
-        self.fc = nn.Linear(hidden_dim, 256*8*8)
-        self.upsample = nn.Upsample((128, 128), mode='bilinear', align_corners=False)
-
-    def forward(self, x):
-        x = self.fc(x)
-        # Reshape to [bz, 256, 8, 8]
-        x = x.view(-1, 256, 8, 8)
-        # Upsample to [bz, 256, 128, 128]
-        x = self.upsample(x)
-        return x
+from .Multimodal import CLIP_Transform
 
 class HGPIFuNet(BasePIFuNet):
     '''
@@ -72,6 +57,7 @@ class HGPIFuNet(BasePIFuNet):
         self.intermediate_preds_list = []
         if opt.use_clip_encoder:
             self.clip_encoder, _ = clip.load(opt.clip_model_name)
+            self.clip_encoder = self.clip_encoder.eval().requires_grad_(False)
             self.clip_normalizer = transforms.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))
             self.clip_transform = transforms.Compose([
                 transforms.Resize((224, 224)),
@@ -81,9 +67,15 @@ class HGPIFuNet(BasePIFuNet):
                 'ViT-L/14': 768,
                 'RN50': 512,
             }
-            self.clip_feature_transform = CLIP_Transform(self.clip_dim_dict[opt.clip_model_name])
-            
-        init_net(self)
+            if opt.feature_fusion == 'tf_concat':
+                # transform then concat
+                self.clip_feature_transform = CLIP_Transform(self.clip_dim_dict[opt.clip_model_name])
+            elif opt.feature_fusion == 'concat':
+                pass
+            elif opt.feature_fusion == 'add':
+                pass
+        
+        init_net(self, gpu_ids=self.opt.gpu_ids)
 
     
     def filter(self, images):
@@ -100,11 +92,20 @@ class HGPIFuNet(BasePIFuNet):
             # First transfrom images to clip input
             clip_tf = self.clip_transform(images)
             clip_feature = self.clip_encoder.encode_image(clip_tf) #[bz, 768]
-            # transform from [bz, 256, 3] to [bz, 256, 128, 128]
-            transformed_clip = self.clip_feature_transform(clip_feature.float())
-            
-            self.im_feat_list.append(transformed_clip)
-
+            if opt.feature_fusion == 'tf_concat':
+                # transform from [bz, 256, 3] to [bz, 256, 128, 128]
+                transformed_clip = self.clip_feature_transform(clip_feature.float())
+                self.im_feat_list.append(transformed_clip)
+                
+            elif opt.feature_fusion == 'add':
+                # add clip feature to each intermediate feature
+                # shape transform from [bz, 256, 3] to [bz, 256, 128, 128]
+                clip_feature_tf = clip_feature.reshape(clip_feature.shape[0], 256, -1)
+                clip_feature_tf = torch.mean(clip_feature_tf, dim=-1)
+                for i in range(len(self.im_feat_list)):
+                    clip_feature_tf = clip_feature_tf.unsqueeze(-1).unsqueeze(-1)
+                    self.im_feat_list[i] = self.im_feat_list[i] + clip_feature_tf
+                
 
     def query(self, points, calibs, transforms=None, labels=None):
         '''

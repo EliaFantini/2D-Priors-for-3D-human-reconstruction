@@ -20,6 +20,8 @@ from lib.train_util import *
 from lib.data import *
 from lib.model import *
 from lib.geometry import index
+import pdb
+from tqdm import tqdm
 
 # get options
 opt = BaseOptions().parse()
@@ -87,7 +89,7 @@ def train(opt):
 
         set_train()
         iter_data_time = time.time()
-        for train_idx, train_data in enumerate(train_data_loader):
+        for train_idx, train_data in enumerate(tqdm(train_data_loader)):
             iter_start_time = time.time()
 
             # retrieve the data
@@ -106,6 +108,7 @@ def train(opt):
 
             optimizerG.zero_grad()
             error.backward()
+            # pdb.set_trace()
             optimizerG.step()
 
             iter_net_time = time.time()
