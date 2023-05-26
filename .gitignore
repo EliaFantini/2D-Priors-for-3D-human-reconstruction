@@ -2,3 +2,4 @@ checkpoints/*
 wandb/
 results/
 __pycache__/
+similarities/
