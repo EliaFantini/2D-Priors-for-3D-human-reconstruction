@@ -67,12 +67,12 @@ class HGPIFuNet(BasePIFuNet):
                 'ViT-L/14': 768,
                 'RN50': 512,
             }
-            if opt.feature_fusion == 'tf_concat':
+            if self.opt.feature_fusion == 'tf_concat':
                 # transform then concat
                 self.clip_feature_transform = CLIP_Transform(self.clip_dim_dict[opt.clip_model_name])
-            elif opt.feature_fusion == 'concat':
+            elif self.opt.feature_fusion == 'concat':
                 pass
-            elif opt.feature_fusion == 'add':
+            elif self.opt.feature_fusion == 'add':
                 pass
         
         init_net(self, gpu_ids=self.opt.gpu_ids)
@@ -92,12 +92,12 @@ class HGPIFuNet(BasePIFuNet):
             # First transfrom images to clip input
             clip_tf = self.clip_transform(images)
             clip_feature = self.clip_encoder.encode_image(clip_tf) #[bz, 768]
-            if opt.feature_fusion == 'tf_concat':
+            if self.opt.feature_fusion == 'tf_concat':
                 # transform from [bz, 256, 3] to [bz, 256, 128, 128]
                 transformed_clip = self.clip_feature_transform(clip_feature.float())
                 self.im_feat_list.append(transformed_clip)
                 
-            elif opt.feature_fusion == 'add':
+            elif self.opt.feature_fusion == 'add':
                 # add clip feature to each intermediate feature
                 # shape transform from [bz, 256, 3] to [bz, 256, 128, 128]
                 clip_feature_tf = clip_feature.reshape(clip_feature.shape[0], 256, -1)
