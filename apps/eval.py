@@ -37,9 +37,14 @@ import glob
 import tqdm
 
 import trimesh
+
 os.environ['PYOPENGL_PLATFORM'] = 'egl'
 # get options
 opt = BaseOptions().parse()
+
+from camera.camera import Camera
+from raygen import generate_centered_pixel_coords, generate_pinhole_rays, generate_ortho_rays
+from sphere_tracing import sphere_tracing
 
 
 class MeshEvaluator:
@@ -559,6 +564,61 @@ class Evaluator:
             'b_min': B_MIN,
             'b_max': B_MAX,
         }
+    
+    def render(self, data):
+        look_at = torch.zeros( (4, 3), dtype=torch.float32, device=self.cuda)
+        camera_position = torch.tensor( [ [0, 0, 2],
+                                                    [2, 0, 0],
+                                                    [0, 0, -2],
+                                                    [-2, 0, 0]  ]  , dtype=torch.float32, device=self.cuda)
+
+        camera_up_direction = torch.tensor( [[0, 1, 0]], dtype=torch.float32, device=self.cuda).repeat(4, 1,)
+
+        camera = Camera.from_args(eye=camera_position[0],
+                                    at=look_at[0],
+                                    up=camera_up_direction[0],
+                                    fov_distance=1,
+                                    width=512,
+                                    height=512,
+                                    dtype=torch.float32)
+
+        ray_grid = generate_centered_pixel_coords(camera.width, camera.height,
+                                                        camera.width, camera.height, device=self.cuda)
+
+            
+        #ray_orig, ray_dir = generate_pinhole_rays(camera.to(ray_grid[0].device), ray_grid)
+        ray_orig, ray_dir = generate_ortho_rays(camera.to(ray_grid[0].device), ray_grid)
+        # ray_orig, ray_dir are of shape  [262144, 3], turn it into shape [512, 512, 3] and save it as an image
+        ray_orig_copy = ray_orig.reshape(512, 512, 3)
+        ray_dir_copy = ray_dir.reshape(512, 512, 3)
+        ray_orig_copy = ray_orig_copy.cpu().numpy()
+        ray_dir_copy = ray_dir_copy.cpu().numpy()
+        # save ray_orig_copy and ray_dir_copy as images
+        # rescale ray_orig_copy and ray_dir_copy to [0, 255]
+        ray_orig_copy = (ray_orig_copy - np.min(ray_orig_copy)) / (np.max(ray_orig_copy) - np.min(ray_orig_copy)) * 255
+        ray_dir_copy = (ray_dir_copy - np.min(ray_dir_copy)) / (np.max(ray_dir_copy) - np.min(ray_dir_copy)) * 255
+        ray_orig_copy = Image.fromarray(np.uint8(ray_orig_copy))
+        ray_dir_copy = Image.fromarray(np.uint8(ray_dir_copy))
+        ray_orig_copy.save("/home/fantini/CS-503-Chengkun-Fantini-Liu/ray_orig_copy.png")
+        ray_dir_copy.save("/home/fantini/CS-503-Chengkun-Fantini-Liu/ray_dir_copy.png")
+        points_on_surface, _ ,_ , hit = sphere_tracing(self.netG,ray_orig,ray_dir,
+                                                       data['img'],data['calib'], device=self.cuda)
+        color = np.zeros(points_on_surface.shape)
+        interval = 10000
+        for i in range(len(color) // interval):
+            left = i * interval
+            right = i * interval + interval
+            if i == len(color) // interval - 1:
+                right = -1
+            self.netC.query(points_on_surface[:, :, left:right], data['calib'])
+            rgb = self.netC.get_preds()[0].detach().cpu().numpy() * 0.5 + 0.5
+            color[left:right] = rgb.T
+        print(color.shape)
+        print(color.max())
+        print(color.min())
+        print(color)
+        print("OK")
+            
 
     def eval(self, data, use_octree=False, path=None):
         '''
@@ -572,6 +632,10 @@ class Evaluator:
             if self.netC:
                 self.netC.eval()
             save_path = '%s/%s/result_%s.obj' % (path, opt.name, data['name'])
+
+            self.render(data)
+            
+
             if self.netC:
                 gen_mesh_color(opt, self.netG, self.netC, self.cuda, data, save_path, use_octree=use_octree)
             else:
@@ -616,7 +680,7 @@ if __name__ == '__main__':
             
         print(image_path) # , mask_path)
         data = evaluator.load_image(image_path) # , mask_path)
-        #evaluator.eval(data, True, results_path)
+        evaluator.eval(data, True, results_path)
         # metrics calculation
         reconstructed_obj_path = '%s/%s/result_%s.obj' % (results_path, opt.name, data['name'])
         print(f"reconstructed_obj_path: {reconstructed_obj_path}")
