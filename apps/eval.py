@@ -589,18 +589,6 @@ class Evaluator:
         #ray_orig, ray_dir = generate_pinhole_rays(camera.to(ray_grid[0].device), ray_grid)
         ray_orig, ray_dir = generate_ortho_rays(camera.to(ray_grid[0].device), ray_grid)
         # ray_orig, ray_dir are of shape  [262144, 3], turn it into shape [512, 512, 3] and save it as an image
-        ray_orig_copy = ray_orig.reshape(512, 512, 3)
-        ray_dir_copy = ray_dir.reshape(512, 512, 3)
-        ray_orig_copy = ray_orig_copy.cpu().numpy()
-        ray_dir_copy = ray_dir_copy.cpu().numpy()
-        # save ray_orig_copy and ray_dir_copy as images
-        # rescale ray_orig_copy and ray_dir_copy to [0, 255]
-        ray_orig_copy = (ray_orig_copy - np.min(ray_orig_copy)) / (np.max(ray_orig_copy) - np.min(ray_orig_copy)) * 255
-        ray_dir_copy = (ray_dir_copy - np.min(ray_dir_copy)) / (np.max(ray_dir_copy) - np.min(ray_dir_copy)) * 255
-        ray_orig_copy = Image.fromarray(np.uint8(ray_orig_copy))
-        ray_dir_copy = Image.fromarray(np.uint8(ray_dir_copy))
-        ray_orig_copy.save("/home/fantini/CS-503-Chengkun-Fantini-Liu/ray_orig_copy.png")
-        ray_dir_copy.save("/home/fantini/CS-503-Chengkun-Fantini-Liu/ray_dir_copy.png")
         points_on_surface, _ ,_ , hit = sphere_tracing(self.netG,ray_orig,ray_dir,
                                                        data['img'],data['calib'], device=self.cuda)
         color = np.zeros(points_on_surface.shape)

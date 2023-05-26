@@ -324,24 +324,7 @@ def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step
             # 3. Check that the ray has not exit the far clipping plane.
             #cond = (torch.abs(t) < self.clamp[1])[:,0]
             
-            print("###################")
             hit = (torch.abs(t) < camera_clamp)[:,0]
-            if hit.all():
-                print("hit all true")
-            elif hit.any():
-                print("hit true and false")
-            else:
-                print("hit all false")
-            print("d first elements: ", d[0:10])
-            print("cond shape: ", cond.shape)
-            print("hit shape: ", hit.shape)
-            print("d shape: ", d.shape)
-            print("dprev shape: ", dprev.shape)
-            print("t shape: ", t.shape)
-            print("x shape: ", x.shape)
-            print("ray_o shape: ", ray_o.shape)
-            print("ray_d shape: ", ray_d.shape)
-            print("###################")
             
             # 1. not hit surface
             cond = cond & (torch.abs(d) > min_dis)
@@ -351,13 +334,6 @@ def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step
             # 3. not a hit
             cond = cond & hit
             
-            print(cond)
-            if cond.all():
-                print("all true")
-            elif cond.any():
-                print("true and false")
-            else:
-                print("all false")
             
             #cond = cond & ~hit
             
@@ -368,7 +344,6 @@ def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step
             x_new = torch.addcmul(ray_o, ray_d, t)
             x_new = torch.transpose(x_new, 0, 1)
             x_new = x_new.unsqueeze(0) 
-            print("x_new shape: ", x_new.shape)
             # change the values pf x where cond is true with the values of x_new
             # create a new tensor with the indexes of the cond tensor for which the value is true
             indexes = torch.nonzero(cond)
@@ -386,17 +361,6 @@ def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step
 
     # AABB cull 
     x = torch.transpose(x, 1, 2)
-    print(x)
-    # x is a tensor, print min and max for each dimension
-    print(x.shape)
-    print(x.min(dim=1))
-    print(x.max(dim=1))
-    if hit.all():
-        print("hit all true")
-    elif hit.any():
-        print("hit true and false")
-    else:
-                print("hit all false")
 
     hit = hit & ~(torch.abs(x) > 1.0).any(dim=-1)
     #hit = torch.ones_like(d).byte()[...,0]
@@ -406,20 +370,6 @@ def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step
     #  t: the final distance from origin
     #  d: the final distance value from
     #  miss: a vector containing bools of whether each ray was a hit or miss
-    
-    """if hit.any():
-        grad = finitediff_gradient(x[hit], nef.get_forward_function("sdf"))
-        _normal = F.normalize(grad, p=2, dim=-1, eps=1e-5)
-        normal[hit] = _normal"""
-    
-    
-    if hit.all():
-        print("hit all true")
-    elif hit.any():
-        print("hit true and false")
-    else:
-                print("hit all false")
-    # count the number of False in in hit and print it
     
 
     return x, t, d, hit
