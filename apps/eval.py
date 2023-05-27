@@ -505,6 +505,7 @@ class Evaluator:
         dst_h = output_size[1]
 
         rot_rad = np.pi * rot / 180
+    
         src_dir = get_dir([0, src_w * -0.5], rot_rad)
         dst_dir = np.array([0, dst_w * -0.5], np.float32)
 
@@ -541,7 +542,10 @@ class Evaluator:
         # mask = transforms.ToTensor()(mask).float()
         # image
         image = Image.open(image_path).convert('RGB')
+        
         mask = remove(image, alpha_matting=True, session=new_session("u2netP"))
+
+            
         # from mask only get the alpha channel
         mask = mask.split()[-1]
         
@@ -565,12 +569,12 @@ class Evaluator:
             'b_max': B_MAX,
         }
     
-    def render(self, data):
+    def render(self, data, output_path):
         look_at = torch.zeros( (4, 3), dtype=torch.float32, device=self.cuda)
         camera_position = torch.tensor( [ [0, 0, 2],
-                                                    [2, 0, 0],
-                                                    [0, 0, -2],
-                                                    [-2, 0, 0]  ]  , dtype=torch.float32, device=self.cuda)
+                                        [2, 0, 0],
+                                        [0, 0, -2],
+                                        [-2, 0, 0]  ]  , dtype=torch.float32, device=self.cuda)
 
         camera_up_direction = torch.tensor( [[0, 1, 0]], dtype=torch.float32, device=self.cuda).repeat(4, 1,)
 
@@ -588,24 +592,65 @@ class Evaluator:
             
         #ray_orig, ray_dir = generate_pinhole_rays(camera.to(ray_grid[0].device), ray_grid)
         ray_orig, ray_dir = generate_ortho_rays(camera.to(ray_grid[0].device), ray_grid)
-        # ray_orig, ray_dir are of shape  [262144, 3], turn it into shape [512, 512, 3] and save it as an image
-        points_on_surface, _ ,_ , hit = sphere_tracing(self.netG,ray_orig,ray_dir,
-                                                       data['img'],data['calib'], device=self.cuda)
-        color = np.zeros(points_on_surface.shape)
+
+        
+        data['img'] = data['img'].to(self.cuda)
+        self.netG.filter(data['img'])
+        self.netC.filter(data['img'])
+        self.netC.attach(self.netG.get_im_feat())
+
+        points_on_surface, _ ,_ , hit = sphere_tracing(self.netG,ray_orig,ray_dir,data['calib'], device=self.cuda, num_steps = 64,step_size=0.1, min_dis=0.0005, camera_clamp = 3.0 )
+       
+        points_on_surface = points_on_surface[hit].unsqueeze(0)
+
+        points_on_surface = torch.transpose(points_on_surface, 1, 2)
+        """print(points_on_surface.shape)
+        print(hit.shape)
+        self.netC.query(points_on_surface[0, :, :].to(self.cuda), data['calib'].to(self.cuda))
+        aa = self.netC.get_preds()
+        print(aa.shape)
+        print(aa.max())
+        print(aa.min())
+        print(aa)"""
+
+        color = np.zeros([262144,3])
+        self.netC.query(points_on_surface.to(self.cuda), data['calib'].to(self.cuda))
+        rgb =  self.netC.get_preds()
+        rgb = self.netC.get_preds()[0].detach().cpu().numpy() * 0.5 + 0.5
+        color[hit.cpu().numpy()[0,:]] = rgb.T
+        """print("########## points_on_surface shape :", points_on_surface.shape)
         interval = 10000
-        for i in range(len(color) // interval):
+        print("########## len color :", points_on_surface.shape[2])
+        for i in range(points_on_surface.shape[2] // interval):
             left = i * interval
             right = i * interval + interval
-            if i == len(color) // interval - 1:
+            if i == points_on_surface.shape[2] // interval - 1:
                 right = -1
-            self.netC.query(points_on_surface[:, :, left:right], data['calib'])
+            print("input netC shape:", points_on_surface[:, :, left:right].shape)
+            print("input calib shape:", data['calib'].shape)
+            print("input  :",points_on_surface[:, :, 0])
+            print("calib  :",data['calib'])
+            self.netC.query(points_on_surface[:, :, left:right].to(self.cuda), data['calib'].to(self.cuda))
+            rgb =  self.netC.get_preds()
+            print("rgb shape:", rgb.shape)
+            print("rgb :", rgb)
+            print("rgb min:", rgb.min())
+            print("rgb max:", rgb.max())
             rgb = self.netC.get_preds()[0].detach().cpu().numpy() * 0.5 + 0.5
+            print("rgb shape:", rgb.shape)
+            print("rgb :", rgb)
+            print("rgb min:", rgb.min())
+            print("rgb max:", rgb.max())    
             color[left:right] = rgb.T
         print(color.shape)
         print(color.max())
         print(color.min())
-        print(color)
-        print("OK")
+        print(color)"""
+        color = color*255
+        color = color.reshape(512,512,3)
+        rendering = Image.fromarray(color.astype(np.uint8))
+        rendering.save(output_path + "/out_diff_rendering.png")
+        print("RENDERING DONE")
             
 
     def eval(self, data, use_octree=False, path=None):
@@ -621,7 +666,7 @@ class Evaluator:
                 self.netC.eval()
             save_path = '%s/%s/result_%s.obj' % (path, opt.name, data['name'])
 
-            self.render(data)
+            self.render(data, output_path="/home/fantini/CS-503-Chengkun-Fantini-Liu")
             
 
             if self.netC:
@@ -631,6 +676,8 @@ class Evaluator:
 
 
 if __name__ == '__main__':
+    import warnings
+    warnings.filterwarnings("ignore") 
     evaluator = Evaluator(opt)
     mesh_evaluator = MeshEvaluator()
     mesh_evaluator.init_gl()

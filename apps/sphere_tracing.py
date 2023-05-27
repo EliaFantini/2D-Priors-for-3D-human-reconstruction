@@ -12,6 +12,8 @@ from camera.camera import Camera
 import torch
 import torch.nn.functional as F
 
+from tqdm import tqdm
+
 
 # Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
 #
@@ -281,7 +283,7 @@ def sphere_trace_sdf(nef, ray_o, ray_d, img, calib, num_steps = 1024, step_size 
     return x, t, d, hit
         
 
-def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step_size = 0.8, min_dis=0.0003, camera_clamp = 10.0):
+def sphere_tracing(nef, ray_o, ray_d, calib, device, num_steps = 1024, step_size = 0.8, min_dis=0.0003, camera_clamp = 10.0):
     # Distanace from ray origin
     t = torch.zeros(ray_o.shape[0], 1, device=ray_o.device)
     # Position in model space
@@ -298,11 +300,9 @@ def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step
     # locations, where additional quantities (normal, depth, segmentation) can be determined. The
     # gradients will propagate only to these locations. 
     with torch.no_grad():
-
-        img = img.to(device)
+       
         calib = calib.to(device)
 
-        nef.filter(img)
         nef.query(x, calib)
         #d = nef.get_preds()
         d = nef.get_preds()[0][0]
@@ -315,7 +315,23 @@ def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step
         #cond = torch.ones_like(d).bool()[:,0]
         # If miss is TRUE, then the corresponding ray has missed entirely.
         hit = torch.zeros_like(d).byte()    
-        for i in range(num_steps):
+
+       
+        d_list = []
+        t_list = []
+        x_list = []
+        y_list = []
+        z_list = []
+
+
+        for i in tqdm(range(num_steps)):
+            # calculate max and min of d,t and x, convert them to numpy and append to list
+            d_list.append([torch.max(d).cpu().numpy(), torch.min(d).cpu().numpy()])
+            t_list.append([torch.max(t[:,0]).cpu().numpy(), torch.min(t[:,0]).cpu().numpy()])
+            x_list.append([torch.max(x[0,0,:]).cpu().numpy(), torch.min(x[0,0,:]).cpu().numpy()])
+            y_list.append([torch.max(x[0,1,:]).cpu().numpy(), torch.min(x[0,1,:]).cpu().numpy()])
+            z_list.append([torch.max(x[0,2,:]).cpu().numpy(), torch.min(x[0,2,:]).cpu().numpy()])
+            
             # 1. Check if ray hits.
             #hit = (torch.abs(d) < self._MIN_DIS)[:,0] 
             # 2. Check that the sphere tracing is not oscillating
@@ -324,7 +340,25 @@ def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step
             # 3. Check that the ray has not exit the far clipping plane.
             #cond = (torch.abs(t) < self.clamp[1])[:,0]
             
+            
             hit = (torch.abs(t) < camera_clamp)[:,0]
+            """print("###################")
+            if hit.all():
+                print("hit all true")
+            elif hit.any():
+                print("hit true and false")
+            else:
+                print("hit all false")
+            print("d first elements: ", d[0:10])
+            print("cond shape: ", cond.shape)
+            print("hit shape: ", hit.shape)
+            print("d shape: ", d.shape)
+            print("dprev shape: ", dprev.shape)
+            print("t shape: ", t.shape)
+            print("x shape: ", x.shape)
+            print("ray_o shape: ", ray_o.shape)
+            print("ray_d shape: ", ray_d.shape)
+            print("###################")"""
             
             # 1. not hit surface
             cond = cond & (torch.abs(d) > min_dis)
@@ -334,6 +368,13 @@ def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step
             # 3. not a hit
             cond = cond & hit
             
+            """print(cond)
+            if cond.all():
+                print("all true")
+            elif cond.any():
+                print("true and false")
+            else:
+                print("all false")"""
             
             #cond = cond & ~hit
             
@@ -344,6 +385,7 @@ def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step
             x_new = torch.addcmul(ray_o, ray_d, t)
             x_new = torch.transpose(x_new, 0, 1)
             x_new = x_new.unsqueeze(0) 
+            """print("x_new shape: ", x_new.shape)"""
             # change the values pf x where cond is true with the values of x_new
             # create a new tensor with the indexes of the cond tensor for which the value is true
             indexes = torch.nonzero(cond)
@@ -361,6 +403,17 @@ def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step
 
     # AABB cull 
     x = torch.transpose(x, 1, 2)
+    
+    """print(x)
+    print(x.shape)
+    print(x.min(dim=1))
+    print(x.max(dim=1))
+    if hit.all():
+        print("hit all true")
+    elif hit.any():
+        print("hit true and false")
+    else:
+                print("hit all false")"""
 
     hit = hit & ~(torch.abs(x) > 1.0).any(dim=-1)
     #hit = torch.ones_like(d).byte()[...,0]
@@ -371,6 +424,92 @@ def sphere_tracing(nef, ray_o, ray_d, img, calib, device, num_steps = 1024, step
     #  d: the final distance value from
     #  miss: a vector containing bools of whether each ray was a hit or miss
     
+    """if hit.any():
+        grad = finitediff_gradient(x[hit], nef.get_forward_function("sdf"))
+        _normal = F.normalize(grad, p=2, dim=-1, eps=1e-5)
+        normal[hit] = _normal"""
+    
+    # x,y,z,d and t lists create a plot with two lines, one per min and one per max values, then save the plot in the folder
+    """import matplotlib.pyplot as plt
+    # d_list is a list of tuples containing two numbers each, use the first number of each tuple to create a list and the same for the second
+    d_list1 = [item[0] for item in d_list]
+    print("AO")
+    d_list2 = [item[1] for item in d_list]
+    # use d_list1 and d_list2 to create a plot with two lines and save it
+    plt.plot(d_list1, label="max")
+    plt.plot(d_list2, label="min")
+    plt.legend()
+    plt.title("d")
+    plt.xlabel("Value")
+    plt.ylabel("Iterations")
+    plt.savefig('d_list.png')
+    plt.close()
+    t_list1 = [item[0] for item in t_list]
+    t_list2 = [item[1] for item in t_list]
+    plt.plot(t_list1, label="max")
+    plt.plot(t_list2, label="min")
+    plt.legend()
+    plt.title("t")
+    plt.xlabel("Value")
+    plt.ylabel("Iterations")
+    plt.savefig('t_list.png')
+    plt.close()
+    x_list1 = [item[0] for item in x_list]
+    x_list2 = [item[1] for item in x_list]
+    plt.plot(x_list1, label="max")
+    plt.plot(x_list2, label="min")
+    plt.legend()
+    plt.title("x")
+    plt.xlabel("Value")
+    plt.ylabel("Iterations")
+    plt.savefig('x_list.png')
+    plt.close()
+    y_list1 = [item[0] for item in y_list]
+    y_list2 = [item[1] for item in y_list]
+    plt.plot(y_list1)
+    plt.plot(y_list2)
+    plt.legend()
+    plt.title("y")
+    plt.xlabel("Value")
+    plt.ylabel("Iterations")
+    plt.savefig('y_list.png')
+    plt.close()
+    z_list1 = [item[0] for item in z_list]
+    z_list2 = [item[1] for item in z_list]
+    plt.plot(z_list1, label="max")
+    plt.plot(z_list2, label="min")
+    plt.legend()
+    plt.title("z")
+    plt.xlabel("Value")
+    plt.ylabel("Iterations")
+    plt.savefig('z_list.png')
+    plt.close()"""
+
+    """if hit.all():
+        print("hit all true")
+    elif hit.any():
+        print("hit true and false")
+    else:
+                print("hit all false")
+    # count the number of False in in hit and print it
+    print("GIGI d:")
+    print(d)
+    # count the number of True that there are in hit and print it
+    print("GIGI hit:")
+    print(hit.sum())"""
+
+    # create a copy of hit called cpy, where cpy is True change it to 255, 0 otherwise. then reshape it from [512x512] to [512,512,1]
+    """cpy = hit.clone()
+    cpy = cpy.reshape(512,512)
+    img_mask = torch.zeros([512,512,3], dtype=torch.uint8)
+    img_mask[cpy] = 255
+    # save cpy as an image using PIL
+    
+    img_mask = img_mask.cpu().numpy()
+    from PIL import Image
+    img_mask = Image.fromarray(img_mask)
+    img_mask.save("hit.png")"""
+
 
     return x, t, d, hit
 
