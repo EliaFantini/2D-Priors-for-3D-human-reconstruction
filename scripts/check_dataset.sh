@@ -13,3 +13,20 @@ find "$base_dir" -type d -print0 | while IFS= read -r -d '' dir; do
     fi
 done
 
+base_directory="/scratch/izar/ckli/rendered_jiff_complete"
+
+for sub_directory in "$base_directory"/*; do
+    if [ -d "$sub_directory" ]; then
+        if [ "$(basename "$sub_directory")" = "GEO" ]; then
+            sub_directory="$sub_directory/OBJ"
+        fi
+
+        for i in {0..525}; do
+            directory_name=$(printf "%04d" "$i")
+            if [ ! -d "$sub_directory/$directory_name" ]; then
+                echo "Missing directory: $sub_directory/$directory_name"
+            fi
+        done
+    fi
+done
+
