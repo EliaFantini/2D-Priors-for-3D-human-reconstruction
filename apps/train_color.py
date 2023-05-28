@@ -135,7 +135,7 @@ def train_color(opt):
                     iter_net_time - epoch_start_time)
 
             if train_idx % opt.freq_plot == 0:
-                print(
+                tqdm.write(
                     'Name: {0} | Epoch: {1} | {2}/{3} | Err: {4:.06f} | LR: {5:.06f} | dataT: {6:.05f} | netT: {7:.05f} | ETA: {8:02d}:{9:02d}'.format(
                         opt.name, epoch, train_idx, len(train_data_loader),
                         error.item(),
