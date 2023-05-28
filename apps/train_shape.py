@@ -24,7 +24,7 @@ import wandb
 
 # get options
 opt = BaseOptions().parse()
-wandb.init(project="PIFu", config=opt, entity="visualintelligence")
+wandb.init(project="PIFu", config=opt, entity="visualintelligence", resume=True)
 
 def train(opt):
     # set cuda
