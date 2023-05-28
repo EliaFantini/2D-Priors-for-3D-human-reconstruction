@@ -251,20 +251,22 @@ def init_weights(net, init_type='normal', init_gain=0.02):
     net.apply(init_func)  # apply the initialization function <init_func>
 
 
-def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
+def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=''):
     """Initialize a network: 1. register CPU/GPU device (with multi-GPU support); 2. initialize the network weights
     Parameters:
         net (network)      -- the network to be initialized
         init_type (str)    -- the name of an initialization method: normal | xavier | kaiming | orthogonal
         gain (float)       -- scaling factor for normal, xavier and orthogonal.
-        gpu_ids (int list) -- which GPUs the network runs on: e.g., 0,1,2
+        gpu_ids (str) -- which GPUs the network runs on: e.g., 0,1,2
 
     Return an initialized network.
     """
+    gpu_ids = [int(x) for x in gpu_ids.split(',')]
     if len(gpu_ids) > 0:
         assert (torch.cuda.is_available())
         net.to(gpu_ids[0])
-        net = torch.nn.DataParallel(net, gpu_ids)  # multi-GPUs
+        net = torch.nn.DataParallel(net)  # multi-GPUs
+        print('Using GPU: ', gpu_ids)
     init_weights(net, init_type, init_gain=init_gain)
     return net
 

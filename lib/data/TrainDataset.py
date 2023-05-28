@@ -112,7 +112,7 @@ class TrainDataset(Dataset):
 
     def get_subjects(self):
         if self.phase in ['train', 'test']:
-            all_subjects = os.listdir(self.RENDER)
+            all_subjects = np.loadtxt(os.path.join(self.root, 'used.txt'), dtype=str) #os.listdir(self.RENDER)
             val_subjects = np.loadtxt(os.path.join(self.root, 'val.txt'), dtype=str)
         elif self.phase == 'augment':
             all_subjects = set()

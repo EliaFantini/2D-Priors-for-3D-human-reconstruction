@@ -52,7 +52,7 @@ class HGPIFuNet(BasePIFuNet):
 
         self.intermediate_preds_list = []
 
-        init_net(self)
+        init_net(self, gpu_ids=self.opt.gpu_ids)
 
     def filter(self, images):
         '''
