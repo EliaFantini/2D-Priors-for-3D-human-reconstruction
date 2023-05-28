@@ -9,20 +9,26 @@ import torch
 from PIL.ImageFilter import GaussianBlur
 import trimesh
 import logging
+from tqdm import tqdm
 
 import pdb
 
 log = logging.getLogger('trimesh')
 log.setLevel(40)
 
-def load_trimesh(root_dir):
+def load_trimesh(root_dir, subjects):
     folders = os.listdir(root_dir)
     meshs = {}
-    for i, f in enumerate(folders):
-        sub_name = f
-        meshs[sub_name] = trimesh.load(os.path.join(root_dir, f, '%s.obj' % sub_name))
-
+    total_iterations = len([f for f in folders if f in subjects])  # Count only the folders that match the subjects
+    with tqdm(total=total_iterations, desc='Loading meshes') as pbar:
+        for i, f in enumerate(folders):
+            sub_name = f
+            if sub_name in subjects:
+                meshs[sub_name] = trimesh.load(os.path.join(root_dir, f, '%s.obj' % sub_name))
+                pbar.update(1)  # Update the progress bar for each matched subject
+    print('Loading done!')
     return meshs
+
 
 def save_samples_truncted_prob(fname, points, prob):
     '''
@@ -67,7 +73,6 @@ class TrainDataset(Dataset):
         # Path setup
         self.root = self.opt.dataroot
         self.corruption_folder = '/scratch/izar/ckli/corruptions_benchmark/final'
-        self.corrupted_objects = []
         self.corruption_types = None
         
         self.RENDER = os.path.join(self.root, 'RENDER')
@@ -108,7 +113,7 @@ class TrainDataset(Dataset):
                                    hue=opt.aug_hue)
         ])
 
-        self.mesh_dic = load_trimesh(self.OBJ)
+        self.mesh_dic = load_trimesh(self.OBJ, self.subjects)
 
     def get_subjects(self):
         if self.phase in ['train', 'test']:
@@ -117,7 +122,7 @@ class TrainDataset(Dataset):
         elif self.phase == 'augment':
             all_subjects = set()
             num_types = set()
-            for file_name in os.listdir(self.corruption_folder):
+            for file_name in tqdm(os.listdir(self.corruption_folder), desc='Scanning files'):
                 if file_name.endswith('.png'):
                     # extract object number before .png low_light_4_0424_render_320.png
                     # 0424_320

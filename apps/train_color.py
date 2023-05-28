@@ -21,9 +21,13 @@ from lib.train_util import *
 from lib.data import *
 from lib.model import *
 from lib.geometry import index
+import wandb
+
 
 # get options
 opt = BaseOptions().parse()
+wandb.init(project="PIFu", config=opt, entity="visualintelligence")
+
 
 def train_color(opt):
     # set cuda
@@ -99,12 +103,12 @@ def train_color(opt):
 
     # training
     start_epoch = 0 if not opt.continue_train else max(opt.resume_epoch,0)
-    for epoch in range(start_epoch, opt.num_epoch):
+    for epoch in tqdm(range(start_epoch, opt.num_epoch), desc='Epochs'):
         epoch_start_time = time.time()
 
         set_train()
         iter_data_time = time.time()
-        for train_idx, train_data in enumerate(train_data_loader):
+        for train_idx, train_data in tqdm(enumerate(train_data_loader), total=len(train_data_loader), desc='Training'):
             iter_start_time = time.time()
             # retrieve the data
             image_tensor = train_data['img'].to(device=cuda)
@@ -139,7 +143,13 @@ def train_color(opt):
                         iter_start_time - iter_data_time,
                         iter_net_time - iter_start_time, int(eta // 60),
                         int(eta - 60 * (eta // 60))))
-
+            # Log metrics to wandb
+            wandb.log({
+                'Epoch': epoch,
+                'Error': error.item(),
+                'Learning Rate': lr,
+            })
+            
             if train_idx % opt.freq_save == 0 and train_idx != 0:
                 torch.save(netC.state_dict(), '%s/%s/netC_latest' % (opt.checkpoints_path, opt.name))
                 torch.save(netC.state_dict(), '%s/%s/netC_epoch_%d' % (opt.checkpoints_path, opt.name, epoch))
@@ -169,7 +179,7 @@ def train_color(opt):
                 train_dataset.is_train = True
                 print('eval train | color error:', train_color_error)
                 test_losses['train_color'] = train_color_error
-
+                wandb.log({"Train_color_error": test_losses['train_color']})
             if not opt.no_gen_mesh:
                 print('generate mesh (test) ...')
                 for gen_idx in tqdm(range(opt.num_gen_mesh_test)):
