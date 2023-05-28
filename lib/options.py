@@ -127,7 +127,7 @@ class BaseOptions():
         group_aug.add_argument('--aug_sat', type=float, default=0.0, help='augmentation saturation')
         group_aug.add_argument('--aug_hue', type=float, default=0.0, help='augmentation hue')
         group_aug.add_argument('--aug_blur', type=float, default=0.0, help='augmentation blur')
-
+        
         # special tasks
         self.initialized = True
         return parser
