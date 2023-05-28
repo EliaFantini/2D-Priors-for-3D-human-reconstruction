@@ -20,16 +20,15 @@ from lib.train_util import *
 from lib.data import *
 from lib.model import *
 from lib.geometry import index
-import pdb
-from tqdm import tqdm
+import wandb
 
 # get options
 opt = BaseOptions().parse()
+wandb.init(project="PIFu", config=opt, entity="visualintelligence")
 
 def train(opt):
     # set cuda
     cuda = torch.device('cuda:%d' % opt.gpu_id)
-
     train_dataset = TrainDataset(opt, phase='train')
     test_dataset = TrainDataset(opt, phase='test')
 
@@ -84,12 +83,12 @@ def train(opt):
 
     # training
     start_epoch = 0 if not opt.continue_train else max(opt.resume_epoch,0)
-    for epoch in range(start_epoch, opt.num_epoch):
+    for epoch in tqdm(range(start_epoch, opt.num_epoch), desc='Epochs'):
         epoch_start_time = time.time()
 
         set_train()
         iter_data_time = time.time()
-        for train_idx, train_data in enumerate(tqdm(train_data_loader)):
+        for train_idx, train_data in tqdm(enumerate(train_data_loader), total=len(train_data_loader), desc='Training'):
             iter_start_time = time.time()
 
             # retrieve the data
@@ -122,7 +121,12 @@ def train(opt):
                                                                             iter_start_time - iter_data_time,
                                                                             iter_net_time - iter_start_time, int(eta // 60),
                         int(eta - 60 * (eta // 60))))
-
+            # Log metrics to wandb
+            wandb.log({
+                'Epoch': epoch,
+                'Error': error.item(),
+                'Learning Rate': lr,
+            })
             if train_idx % opt.freq_save == 0 and train_idx != 0:
                 torch.save(netG.state_dict(), '%s/%s/netG_latest' % (opt.checkpoints_path, opt.name))
                 torch.save(netG.state_dict(), '%s/%s/netG_epoch_%d' % (opt.checkpoints_path, opt.name, epoch))
@@ -152,6 +156,8 @@ def train(opt):
                 test_losses['IOU(test)'] = IOU
                 test_losses['prec(test)'] = prec
                 test_losses['recall(test)'] = recall
+                # Log metrics to wandb
+                wandb.log({"Test MSE": MSE, "Test IOU": IOU, "Test Precision": prec, "Test Recall": recall})
 
                 print('calc error (train) ...')
                 train_dataset.is_train = False
@@ -163,6 +169,8 @@ def train(opt):
                 test_losses['IOU(train)'] = IOU
                 test_losses['prec(train)'] = prec
                 test_losses['recall(train)'] = recall
+                # Log metrics to wandb
+                wandb.log({"Train MSE": MSE, "Train IOU": IOU, "Train Precision": prec, "Train Recall": recall})
 
             if not opt.no_gen_mesh:
                 print('generate mesh (test) ...')

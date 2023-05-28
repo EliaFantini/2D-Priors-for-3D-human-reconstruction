@@ -26,7 +26,7 @@ from lib.geometry import index
 opt = BaseOptions().parse()
 
 # Initialize wandb
-wandb.init(project="PIFu", config=opt, entity="chengkun")
+wandb.init(project="PIFu", config=opt, entity="visualintelligence")
 
 def train(opt, adapt_sample=5):
     # set cuda
@@ -86,13 +86,13 @@ def train(opt, adapt_sample=5):
 
     # training
     start_epoch = 0 if not opt.continue_train else max(opt.resume_epoch,0)
-    for epoch in range(start_epoch, opt.num_epoch):
+    for epoch in tqdm(range(start_epoch, opt.num_epoch), desc='Epochs'):
         print('Starting Epoch: {0}'.format(epoch))
         epoch_start_time = time.time()
 
         set_train()
         iter_data_time = time.time()
-        for train_idx, train_data in tqdm(enumerate(train_data_loader)):
+        for train_idx, train_data in tqdm(enumerate(train_data_loader), total=len(train_data_loader), desc='Training'):
             # if trained with more than adapt_sample, then end this epoch
             if train_idx >= adapt_sample:
                 break
@@ -127,8 +127,12 @@ def train(opt, adapt_sample=5):
                                                                             iter_start_time - iter_data_time,
                                                                             iter_net_time - iter_start_time, int(eta // 60),
                         int(eta - 60 * (eta // 60))))
-                # Log metrics to wandb
-                wandb.log({"Error": error.item(), "Learning Rate": lr})
+            # Log metrics to wandb
+            wandb.log({
+                'Epoch': epoch,
+                'Error': error.item(),
+                'Learning Rate': lr,
+            })
 
             if train_idx % opt.freq_save == 0 and train_idx != 0:
                 torch.save(netG.state_dict(), '%s/%s/netG_latest' % (opt.checkpoints_path, opt.name))
