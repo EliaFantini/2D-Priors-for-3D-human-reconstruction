@@ -75,15 +75,20 @@ class ResBlkPIFuNet(BasePIFuNet):
 
         self.preds = self.surface_classifier(point_local_feat)
 
-    def forward(self, images, im_feat, points, calibs, transforms=None, labels=None):
-        self.filter(images)
+    def forward(self, images, im_feat, points, calibs, transforms=None, labels=None, only_query = False):
+        if not only_query:
+            self.filter(images)
 
-        self.attach(im_feat)
+            self.attach(im_feat)
 
         self.query(points, calibs, transforms, labels)
 
         res = self.get_preds()
-        error = self.get_error()
+
+        if not only_query:
+            error = self.get_error()
+        else:
+            error = None
 
         return res, error
 

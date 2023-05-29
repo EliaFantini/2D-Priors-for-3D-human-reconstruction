@@ -283,7 +283,7 @@ def sphere_trace_sdf(nef, ray_o, ray_d, img, calib, num_steps = 1024, step_size 
     return x, t, d, hit
         
 
-def sphere_tracing(nef, ray_o, ray_d, calib, device, num_steps = 1024, step_size = 0.8, min_dis=0.0003, camera_clamp = 10.0):
+def sphere_tracing(nef, ray_o, ray_d, calib, device, num_steps = 128, step_size = 0.05, min_dis=0.0003, camera_clamp = 3.0, calculate_normal = False):
     # Distanace from ray origin
     t = torch.zeros(ray_o.shape[0], 1, device=ray_o.device)
     # Position in model space
@@ -324,7 +324,7 @@ def sphere_tracing(nef, ray_o, ray_d, calib, device, num_steps = 1024, step_size
         z_list = []
 
 
-        for i in tqdm(range(num_steps)):
+        for i in range(num_steps):
             # calculate max and min of d,t and x, convert them to numpy and append to list
             d_list.append([torch.max(d).cpu().numpy(), torch.min(d).cpu().numpy()])
             t_list.append([torch.max(t[:,0]).cpu().numpy(), torch.min(t[:,0]).cpu().numpy()])
@@ -423,11 +423,12 @@ def sphere_tracing(nef, ray_o, ray_d, calib, device, num_steps = 1024, step_size
     #  t: the final distance from origin
     #  d: the final distance value from
     #  miss: a vector containing bools of whether each ray was a hit or miss
-    
-    """if hit.any():
-        grad = finitediff_gradient(x[hit], nef.get_forward_function("sdf"))
-        _normal = F.normalize(grad, p=2, dim=-1, eps=1e-5)
-        normal[hit] = _normal"""
+    normal = None
+    if calculate_normal:
+        if hit.any():
+            grad = finitediff_gradient(x[hit], nef.get_forward_function("sdf"))
+            _normal = F.normalize(grad, p=2, dim=-1, eps=1e-5)
+            normal[hit] = _normal
     
     # x,y,z,d and t lists create a plot with two lines, one per min and one per max values, then save the plot in the folder
     """import matplotlib.pyplot as plt
@@ -511,5 +512,5 @@ def sphere_tracing(nef, ray_o, ray_d, calib, device, num_steps = 1024, step_size
     img_mask.save("hit.png")"""
 
 
-    return x, t, d, hit
+    return x, t, d, hit, normal
 

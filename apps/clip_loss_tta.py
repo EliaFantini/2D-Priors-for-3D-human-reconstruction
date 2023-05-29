@@ -9,6 +9,7 @@ import io
 import cv2
 from PIL import Image
 import sys
+import clip
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 ROOT_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -556,7 +557,6 @@ class Evaluator:
         mask = transforms.Resize(self.load_size)(mask)
         
         mask = transforms.ToTensor()(mask).float()
-        print(mask.shape)
 
         #mask = self.create_mask(image_path)
         image = mask.expand_as(image) * image
@@ -570,89 +570,126 @@ class Evaluator:
         }
     
     def render(self, data, output_path):
+        def set_train():
+            self.netG.eval()
+            self.netC.train()
+
+        def set_eval():
+            self.netG.eval()
+            self.netC.eval()
+        clip_encoder, _ = clip.load(self.opt.clip_model_name, device = self.cuda)
+        self.clip_encoder = clip_encoder.eval().requires_grad_(False).cuda()
+        self.clip_normalizer = transforms.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))
+        self.clip_transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                self.clip_normalizer
+            ])
+
+        def get_clip_feature( x):
+            transf_x = self.clip_transform(x)
+            feat = self.clip_encoder.encode_image(transf_x)
+            return feat
+
+        
+        lr = 1e-4
+        optimizerC = torch.optim.Adam(self.netC.parameters(), lr=lr)
+        num_iters = 100
+        set_eval()
+        data['calib'] = data['calib'].to(self.cuda)
+        data['img'] = data['img'].to(self.cuda)
+        with torch.no_grad():
+            self.netG.filter(data['img'])
+            self.netC.filter(data['img'])
+            self.netC.attach(self.netG.get_im_feat())
+
         look_at = torch.zeros( (4, 3), dtype=torch.float32, device=self.cuda)
         camera_position = torch.tensor( [ [0, 0, 2],
                                         [2, 0, 0],
                                         [0, 0, -2],
                                         [-2, 0, 0]  ]  , dtype=torch.float32, device=self.cuda)
-        for i in range(4):
-            camera_up_direction = torch.tensor( [[0, 1, 0]], dtype=torch.float32, device=self.cuda).repeat(4, 1,)
+        camera_up_direction = torch.tensor( [[0, 1, 0]], dtype=torch.float32, device=self.cuda).repeat(4, 1,)
 
-            camera = Camera.from_args(eye=camera_position[i],
-                                        at=look_at[0],
-                                        up=camera_up_direction[0],
-                                        fov_distance=1,
-                                        width=512,
-                                        height=512,
-                                        dtype=torch.float32)
+        data['img']=  data['img']*0.5 + 0.5
 
-            ray_grid = generate_centered_pixel_coords(camera.width, camera.height,
-                                                            camera.width, camera.height, device=self.cuda)
+        points_on_surfaces = []
+        hits = []
+        print("\nRendering 4 views:")
+        for i in tqdm.tqdm(range(4)):   
+            with torch.no_grad():    
+                camera = Camera.from_args(eye=camera_position[i],
+                                            at=look_at[0],
+                                            up=camera_up_direction[0],
+                                            fov=10,
+                                            width=512,
+                                            height=512,
+                                            dtype=torch.float32)
+
+                ray_grid = generate_centered_pixel_coords(camera.width, camera.height,
+                                                                camera.width, camera.height, device=self.cuda)
 
                 
-            #ray_orig, ray_dir = generate_pinhole_rays(camera.to(ray_grid[0].device), ray_grid)
-            ray_orig, ray_dir = generate_ortho_rays(camera.to(ray_grid[0].device), ray_grid)
+                ray_orig, ray_dir = generate_pinhole_rays(camera.to(ray_grid[0].device), ray_grid)
+                #ray_orig, ray_dir = generate_ortho_rays(camera.to(ray_grid[0].device), ray_grid)
 
+                
+                
+                
+                
+
+                points_on_surface, _ ,_ , hit, _ = sphere_tracing(self.netG,ray_orig,ray_dir,data['calib'],
+                                                            device=self.cuda )
+                
+                points_on_surface = points_on_surface[hit].unsqueeze(0)
+
+                points_on_surface = torch.transpose(points_on_surface, 1, 2)
+                points_on_surface = points_on_surface.to(self.cuda)
+
+
+                points_on_surfaces.append(points_on_surface)
+                hits.append(hit)
+                
+        print("\nFinetuning:")
+        for iteration in tqdm.tqdm(range(num_iters)):
+            set_train()
+            optimizerC.zero_grad()
+            i = iteration % 4    
+
+            color = torch.zeros([262144,3], device = self.cuda)
+            rgb , _ = self.netC.forward(data['img'], None, points_on_surfaces[i],  data['calib'], None, only_query = True )
+            rgb = rgb[0]*0.5 + 0.5
             
-            data['img'] = data['img'].to(self.cuda)
-            self.netG.filter(data['img'])
-            self.netC.filter(data['img'])
-            self.netC.attach(self.netG.get_im_feat())
             
-
-            points_on_surface, _ ,_ , hit, _ = sphere_tracing(self.netG,ray_orig,ray_dir,data['calib'], 
-                                                        device=self.cuda )
-        
-            points_on_surface = points_on_surface[hit].unsqueeze(0)
-
-            points_on_surface = torch.transpose(points_on_surface, 1, 2)
-            """print(points_on_surface.shape)
-            print(hit.shape)
-            self.netC.query(points_on_surface[0, :, :].to(self.cuda), data['calib'].to(self.cuda))
-            aa = self.netC.get_preds()
-            print(aa.shape)
-            print(aa.max())
-            print(aa.min())
-            print(aa)"""
-
-            color = np.zeros([262144,3])
-            self.netC.query(points_on_surface.to(self.cuda), data['calib'].to(self.cuda))
-            rgb =  self.netC.get_preds()
-            rgb = self.netC.get_preds()[0].detach().cpu().numpy() * 0.5 + 0.5
-            color[hit.cpu().numpy()[0,:]] = rgb.T
-            """print("########## points_on_surface shape :", points_on_surface.shape)
-            interval = 10000
-            print("########## len color :", points_on_surface.shape[2])
-            for i in range(points_on_surface.shape[2] // interval):
-                left = i * interval
-                right = i * interval + interval
-                if i == points_on_surface.shape[2] // interval - 1:
-                    right = -1
-                print("input netC shape:", points_on_surface[:, :, left:right].shape)
-                print("input calib shape:", data['calib'].shape)
-                print("input  :",points_on_surface[:, :, 0])
-                print("calib  :",data['calib'])
-                self.netC.query(points_on_surface[:, :, left:right].to(self.cuda), data['calib'].to(self.cuda))
-                rgb =  self.netC.get_preds()
-                print("rgb shape:", rgb.shape)
-                print("rgb :", rgb)
-                print("rgb min:", rgb.min())
-                print("rgb max:", rgb.max())
-                rgb = self.netC.get_preds()[0].detach().cpu().numpy() * 0.5 + 0.5
-                print("rgb shape:", rgb.shape)
-                print("rgb :", rgb)
-                print("rgb min:", rgb.min())
-                print("rgb max:", rgb.max())    
-                color[left:right] = rgb.T
-            print(color.shape)
-            print(color.max())
-            print(color.min())
-            print(color)"""
-            color = color*255
+            color[hits[i][0,:]] = rgb.T
             color = color.reshape(512,512,3)
-            rendering = Image.fromarray(color.astype(np.uint8))
+            color = torch.permute(color, (2,0,1))
+            color = color.unsqueeze(0)
+
+            target_clip = get_clip_feature(data['img'])
+            rendered_clip = get_clip_feature(color)
+            cosine = torch.cosine_similarity(torch.mean(target_clip, dim=0), torch.mean(rendered_clip, dim=0), dim=0)
+
+            clip_loss = 1.0 - cosine
+            
+            
+            """rendering = Image.fromarray(color.astype(np.uint8))
             rendering.save(output_path + f"/out_diff_rendering_{i}.png")
-            print("RENDERING DONE")
+            print("RENDERING DONE")"""
+           
+            clip_loss.backward()
+            optimizerC.step()
+            directions = ["front", "right","back","left"]
+           
+            print(f"### Iteration {iteration} - {directions[i]} camera - cosine distance: {clip_loss.item()}")
+
+            rendered_image = np.zeros([262144,3])
+            rgb_copy = torch.tensor(rgb, requires_grad = False)
+            rgb_copy = rgb_copy.cpu().numpy()
+            rendered_image[hits[i].cpu().numpy()[0,:]] = rgb_copy.T
+            rendered_image = rendered_image*255
+            rendered_image = rendered_image.reshape(512,512,3)
+            rendering = Image.fromarray(rendered_image.astype(np.uint8))
+            index = "{:04d}".format(iteration)
+            rendering.save(output_path + f"/{index}_{directions[i]}_render.png")
     
 
     def eval(self, data, use_octree=False, path=None):
@@ -661,20 +698,11 @@ class Evaluator:
         :param data: a dict containing at least ['name'], ['image'], ['calib'], ['b_min'] and ['b_max'] tensors.
         :return:
         '''
-        opt = self.opt
-        with torch.no_grad():
-            self.netG.eval()
-            if self.netC:
-                self.netC.eval()
-            save_path = '%s/%s/result_%s.obj' % (path, opt.name, data['name'])
+        
 
-            self.render(data, output_path="/home/fantini/CS-503-Chengkun-Fantini-Liu")
-            
+        self.render(data, output_path="/scratch/izar/fantini/renderings_clip")
+        
 
-            """if self.netC:
-                gen_mesh_color(opt, self.netG, self.netC, self.cuda, data, save_path, use_octree=use_octree)
-            else:
-                gen_mesh(opt, self.netG, self.cuda, data, save_path, use_octree=use_octree)"""
 
 
 if __name__ == '__main__':
@@ -738,26 +766,3 @@ if __name__ == '__main__':
         items.append(item)
         np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
         np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
-        
-    # for image_path in tqdm.tqdm(test_images): # , test_masks)):
-            
-    #     print(image_path) # , mask_path)
-    #     #data = evaluator.load_image(image_path) # , mask_path)
-    #     # metrics calculation
-    #     reconstructed_obj_path = '%s/%s/result_%s.obj' % (results_path, opt.name,  os.path.splitext(os.path.basename(image_path))[0])
-    #     # from all_files get the obj file with the same code as the image, getting it by splitting the path name by "_" and getting the -3 element
-    #     test_obj = [f for f in all_files if 'obj' in f and image_path.split("_")[-3] in f][0]
-    #     print(reconstructed_obj_path)
-    #     print(test_obj)
-    #     mesh_evaluator.set_mesh(reconstructed_obj_path, test_obj)
-    #     vals = []
-    #     vals.append( mesh_evaluator.get_chamfer_dist(500))
-    #     vals.append( mesh_evaluator.get_surface_dist(500))
-    #     item = {
-    #             'name': '%s' % (image_path),
-    #             'vals': vals
-    #         }
-    #     total_vals.append(vals)
-    #     items.append(item)
-    #     np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
-    #     np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
