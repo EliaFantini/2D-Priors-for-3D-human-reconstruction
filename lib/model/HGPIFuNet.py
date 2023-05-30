@@ -6,7 +6,10 @@ from .SurfaceClassifier import SurfaceClassifier
 from .DepthNormalizer import DepthNormalizer
 from .HGFilters import *
 from ..net_util import init_net
-
+import clip
+import pdb
+from torchvision import transforms
+from .Multimodal import CLIP_Transform
 
 class HGPIFuNet(BasePIFuNet):
     '''
@@ -46,14 +49,35 @@ class HGPIFuNet(BasePIFuNet):
         self.normalizer = DepthNormalizer(opt)
 
         # This is a list of [B x Feat_i x H x W] features
+        # We also use this to store CLIP features
         self.im_feat_list = []
         self.tmpx = None
         self.normx = None
 
         self.intermediate_preds_list = []
-
+        if opt.use_clip_encoder:
+            self.clip_encoder, _ = clip.load(opt.clip_model_name)
+            self.clip_encoder = self.clip_encoder.eval().requires_grad_(False)
+            self.clip_normalizer = transforms.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))
+            self.clip_transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                self.clip_normalizer
+            ])
+            self.clip_dim_dict = {
+                'ViT-L/14': 768,
+                'RN50': 512,
+            }
+            if self.opt.feature_fusion == 'tf_concat':
+                # transform then concat
+                self.clip_feature_transform = CLIP_Transform(self.clip_dim_dict[opt.clip_model_name])
+            elif self.opt.feature_fusion == 'concat':
+                pass
+            elif self.opt.feature_fusion == 'add':
+                pass
+        
         init_net(self, gpu_ids=self.opt.gpu_ids)
 
+    
     def filter(self, images):
         '''
         Filter the input images
@@ -64,6 +88,24 @@ class HGPIFuNet(BasePIFuNet):
         # If it is not in training, only produce the last im_feat
         if not self.training:
             self.im_feat_list = [self.im_feat_list[-1]]
+        if self.opt.use_clip_encoder:
+            # First transfrom images to clip input
+            clip_tf = self.clip_transform(images)
+            clip_feature = self.clip_encoder.encode_image(clip_tf) #[bz, 768]
+            if self.opt.feature_fusion == 'tf_concat':
+                # transform from [bz, 256, 3] to [bz, 256, 128, 128]
+                transformed_clip = self.clip_feature_transform(clip_feature.float())
+                self.im_feat_list.append(transformed_clip)
+                
+            elif self.opt.feature_fusion == 'add':
+                # add clip feature to each intermediate feature
+                # shape transform from [bz, 256, 3] to [bz, 256, 128, 128]
+                clip_feature_tf = clip_feature.reshape(clip_feature.shape[0], 256, -1)
+                clip_feature_tf = torch.mean(clip_feature_tf, dim=-1)
+                for i in range(len(self.im_feat_list)):
+                    clip_feature_tf = clip_feature_tf.unsqueeze(-1).unsqueeze(-1)
+                    self.im_feat_list[i] = self.im_feat_list[i] + clip_feature_tf
+                
 
     def query(self, points, calibs, transforms=None, labels=None):
         '''
@@ -92,8 +134,7 @@ class HGPIFuNet(BasePIFuNet):
             tmpx_local_feature = self.index(self.tmpx, xy)
 
         self.intermediate_preds_list = []
-
-        for im_feat in self.im_feat_list:
+        for im_feat in self.im_feat_list: # im_feat [2, 256, 128, 128]
             # [B, Feat_i + z, N]
             point_local_feat_list = [self.index(im_feat, xy), z_feat]
 
@@ -125,7 +166,7 @@ class HGPIFuNet(BasePIFuNet):
         error /= len(self.intermediate_preds_list)
         
         return error
-
+    
     def forward(self, images, points, calibs, transforms=None, labels=None):
         # Get image feature
         self.filter(images)

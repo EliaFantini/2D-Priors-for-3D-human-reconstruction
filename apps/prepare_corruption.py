@@ -1,5 +1,7 @@
 """Usage of this script:
 python -m apps.prepare_corruption <directory_path>
+directory_path: The path to the directory containing the images to be corrupted. Example usage:
+python -m apps.prepare_corruption /scratch/izar/ckli/corruptions_benchmark/final
 """
 import os
 import sys

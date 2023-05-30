@@ -24,6 +24,7 @@ import wandb
 
 # get options
 opt = BaseOptions().parse()
+
 wandb.init(project="PIFu", config=opt, entity="visualintelligence", resume='allow', id=opt.name)
 
 def train(opt):
@@ -83,12 +84,12 @@ def train(opt):
 
     # training
     start_epoch = 0 if not opt.continue_train else max(opt.resume_epoch,0)
-    for epoch in tqdm(range(start_epoch, opt.num_epoch), desc='Epochs'):
+    for epoch in tqdm(tqdm(range(start_epoch, opt.num_epoch), desc='Epochs'), desc='Epochs'):
         epoch_start_time = time.time()
 
         set_train()
         iter_data_time = time.time()
-        for train_idx, train_data in tqdm(enumerate(train_data_loader), total=len(train_data_loader), desc='Training'):
+        for train_idx, train_data in tqdm(tqdm(enumerate(train_data_loader), total=len(train_data_loader), desc='Training'), total=len(train_data_loader), desc='Training'):
             iter_start_time = time.time()
 
             # retrieve the data
@@ -107,6 +108,7 @@ def train(opt):
 
             optimizerG.zero_grad()
             error.backward()
+            # pdb.set_trace()
             optimizerG.step()
 
             iter_net_time = time.time()

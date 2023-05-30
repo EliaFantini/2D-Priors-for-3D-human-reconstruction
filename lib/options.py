@@ -128,6 +128,15 @@ class BaseOptions():
         group_aug.add_argument('--aug_hue', type=float, default=0.0, help='augmentation hue')
         group_aug.add_argument('--aug_blur', type=float, default=0.0, help='augmentation blur')
         
+<<<<<<< HEAD
+=======
+        # CLIP
+        parser.add_argument('--use_clip_encoder', type=bool, default=False, help='use clip encoder as feature encoder')
+        parser.add_argument('--clip_model_name', type=str, default='ViT-L/14', 
+                            help='clip model name, options are ["RN50", "RN101", "RN50x4", "RN50x16", "ViT-B/32", "ViT-B/16", "ViT-L/14"]')
+        parser.add_argument('--feature_fusion', type=str, default='tf_concat', help='feature fusion method, options are ["tf_concat", "add"]')
+
+>>>>>>> clip_multimodal
         # special tasks
         self.initialized = True
         return parser

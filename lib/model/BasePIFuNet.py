@@ -21,7 +21,7 @@ class BasePIFuNet(nn.Module):
 
         self.error_term = error_term
 
-        self.index = index
+        self.index = index # image features at the uv coordinates
         self.projection = orthogonal if projection_mode == 'orthogonal' else perspective
 
         self.preds = None
