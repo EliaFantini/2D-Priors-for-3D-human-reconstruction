@@ -34,4 +34,6 @@ pip install rembg[gpu]
 
 pip uninstall numpy
 pip install numpy==1.22.4
+pip install timm
+pip install einops
 ```
