@@ -134,6 +134,9 @@ class BaseOptions():
                             help='clip model name, options are ["RN50", "RN101", "RN50x4", "RN50x16", "ViT-B/32", "ViT-B/16", "ViT-L/14"]')
         parser.add_argument('--feature_fusion', type=str, default='tf_concat', help='feature fusion method, options are ["tf_concat", "add"]')
 
+        # TTA
+        parser.add_argument('--tta_adapt_sample', type=int, default=5, help='number of adaptation samples for tta')
+        
         # special tasks
         self.initialized = True
         return parser

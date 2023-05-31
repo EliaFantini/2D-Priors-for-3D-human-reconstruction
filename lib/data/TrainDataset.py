@@ -112,8 +112,12 @@ class TrainDataset(Dataset):
             transforms.ColorJitter(brightness=opt.aug_bri, contrast=opt.aug_con, saturation=opt.aug_sat,
                                    hue=opt.aug_hue)
         ])
+        if self.phase == 'augment':
+            self.obj_subjects = [s.split('_')[0] for s in self.subjects]
 
-        self.mesh_dic = load_trimesh(self.OBJ, self.subjects)
+            self.mesh_dic = load_trimesh(self.OBJ, self.obj_subjects)
+        else:
+            self.mesh_dic = load_trimesh(self.OBJ, self.subjects)
 
     def get_subjects(self):
         if self.phase in ['train', 'test']:
@@ -131,6 +135,7 @@ class TrainDataset(Dataset):
                     # low_light_4_0424_render_320.png
                     types = '_'.join(file_name.split('_')[:-3]) # low_light_4
                     num_types.add(types)
+            print('Corrupted objects: %d', all_subjects)
             self.corruption_types = list(num_types)    
             val_subjects = np.loadtxt(os.path.join(self.corruption_folder, 'bench_val.txt'), dtype=str)
             print('Number of validation objects for adaptation: %d' % len(val_subjects))
