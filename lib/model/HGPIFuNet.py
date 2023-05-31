@@ -9,7 +9,11 @@ from ..net_util import init_net
 import clip
 import pdb
 from torchvision import transforms
-from .Multimodal import CLIP_Transform
+from .Multimodal import CLIP_Transform, WrapperModel, DataParallelModel, PerceiverResampler, PatchEmbedding
+from .dpt import DPTRegressionModel
+import pdb
+from einops import rearrange
+
 
 class HGPIFuNet(BasePIFuNet):
     '''
@@ -74,7 +78,24 @@ class HGPIFuNet(BasePIFuNet):
                 pass
             elif self.opt.feature_fusion == 'add':
                 pass
+            elif self.opt.feature_fusion == 'prismer':
+                self.expert_fusion = PerceiverResampler(width=128, layers=2, heads=8, num_latents=128)
+                self.pifu_patchify = PatchEmbedding(patch_size=16, in_channels=3, embedding_dim=128) 
+                self.dpt_patchify = PatchEmbedding(patch_size=16, in_channels=3, embedding_dim=128)
+                self.clip_proj = nn.Linear(self.clip_dim_dict[opt.clip_model_name], 128)
+                
         
+        if opt.use_dpt:
+            map_location = (lambda storage, loc: storage.cuda()) if torch.cuda.is_available() else torch.device('cpu')
+            model_arch_dpt = DPTRegressionModel(num_channels = 3, backbone = 'vitb_rn50_384', non_negative=False)
+            # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            # self.dpt = WrapperModel(DataParallelModel(model_arch_dpt.to(device)))
+            self.dpt = WrapperModel(DataParallelModel(model_arch_dpt))
+            model_robust_state_dict = torch.load(self.opt.dpt_path, map_location=map_location)
+            self.dpt.load_state_dict(model_robust_state_dict["('rgb', '"+'normal'+"')"])
+            self.dpt = self.dpt.eval().requires_grad_(False)
+            self.dpt_tf = transforms.Compose([transforms.Resize(256, antialias=True), transforms.CenterCrop(256)])
+            
         init_net(self, gpu_ids=self.opt.gpu_ids)
 
     
@@ -91,7 +112,7 @@ class HGPIFuNet(BasePIFuNet):
         if self.opt.use_clip_encoder:
             # First transfrom images to clip input
             clip_tf = self.clip_transform(images)
-            clip_feature = self.clip_encoder.encode_image(clip_tf) #[bz, 768]
+            clip_feature = self.clip_encoder.encode_image(clip_tf) #[bz, 128]
             if self.opt.feature_fusion == 'tf_concat':
                 # transform from [bz, 256, 3] to [bz, 256, 128, 128]
                 transformed_clip = self.clip_feature_transform(clip_feature.float())
@@ -105,6 +126,16 @@ class HGPIFuNet(BasePIFuNet):
                 for i in range(len(self.im_feat_list)):
                     clip_feature_tf = clip_feature_tf.unsqueeze(-1).unsqueeze(-1)
                     self.im_feat_list[i] = self.im_feat_list[i] + clip_feature_tf
+            elif self.opt.feature_fusion == 'prismer':
+                # pdb.set_trace()
+                patchify_pifu = self.pifu_patchify(images) # [bz, 3, 128, 128] --> [16, 64, 128]
+                depth = self.dpt(self.dpt_tf(images)) 
+                pathchify_dpt = self.dpt_patchify(depth) # [16, 256, 128]
+                clip_feature = self.clip_proj(clip_feature.float()).unsqueeze(1) # [bz, 128] --> [bz, 1, 128]
+                experts_input = rearrange(torch.cat([patchify_pifu, pathchify_dpt, clip_feature], dim=1), 'b l d -> l b d') # [321, 16, 128]
+                experts_output = self.expert_fusion(experts_input) # [128, bz, 128]
+                experts_output = rearrange(experts_output, 'l b d -> b l d').unsqueeze(1) # [bz, 1, 128, 128]
+                self.im_feat_list = [torch.cat([self.im_feat_list[-1], experts_output], dim=1)] # [bz, 257, 128, 128]
                 
 
     def query(self, points, calibs, transforms=None, labels=None):
@@ -160,6 +191,7 @@ class HGPIFuNet(BasePIFuNet):
         '''
         Hourglass has its own intermediate supervision scheme
         '''
+        # pdb.set_trace()
         error = 0
         for preds in self.intermediate_preds_list:
             error += self.error_term(preds, self.labels)

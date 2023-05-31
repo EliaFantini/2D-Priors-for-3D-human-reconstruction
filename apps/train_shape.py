@@ -24,7 +24,7 @@ import wandb
 
 # get options
 opt = BaseOptions().parse()
-wandb.init(project="PIFu", config=opt, entity="visualintelligence", resume=True)
+wandb.init(project="PIFu", config=opt, entity="visualintelligence", resume='allow', id=opt.name)
 
 def train(opt):
     # set cuda
@@ -49,6 +49,7 @@ def train(opt):
 
     # create net
     netG = HGPIFuNet(opt, projection_mode).to(device=cuda)
+    
     optimizerG = torch.optim.RMSprop(netG.parameters(), lr=opt.learning_rate, momentum=0, weight_decay=0)
     lr = opt.learning_rate
     print('Using Network: ', netG.name)
@@ -62,7 +63,13 @@ def train(opt):
     # load checkpoints
     if opt.load_netG_checkpoint_path is not None:
         print('loading for net G ...', opt.load_netG_checkpoint_path)
-        netG.load_state_dict(torch.load(opt.load_netG_checkpoint_path, map_location=cuda))
+        if opt.feature_fusion == 'prismer':
+            for name, param in netG.named_parameters():
+                state_dict = torch.load(opt.load_netG_checkpoint_path, map_location=cuda)
+                if 'image_filter' in name:
+                    param.data.copy_(state_dict[name])
+        else:
+            netG.load_state_dict(torch.load(opt.load_netG_checkpoint_path, map_location=cuda), strict=False)
 
     if opt.continue_train:
         if opt.resume_epoch < 0:
@@ -71,7 +78,14 @@ def train(opt):
             model_path = '%s/%s/netG_epoch_%d' % (opt.checkpoints_path, opt.name, opt.resume_epoch)
         print('Resuming from ', model_path)
         netG.load_state_dict(torch.load(model_path, map_location=cuda))
-
+    # freeze the network except for the classification layers
+    # if modules not does not contain surface_classifier then freeze
+    if opt.freeze_encoder:
+        print('Freezing encoder of PIFu')
+        for name, param in netG.named_parameters():
+            if 'surface_classifier' not in name:
+                param.requires_grad = False
+    
     os.makedirs(opt.checkpoints_path, exist_ok=True)
     os.makedirs(opt.results_path, exist_ok=True)
     os.makedirs('%s/%s' % (opt.checkpoints_path, opt.name), exist_ok=True)

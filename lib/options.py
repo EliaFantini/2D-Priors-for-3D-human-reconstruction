@@ -132,7 +132,13 @@ class BaseOptions():
         parser.add_argument('--use_clip_encoder', type=bool, default=False, help='use clip encoder as feature encoder')
         parser.add_argument('--clip_model_name', type=str, default='ViT-L/14', 
                             help='clip model name, options are ["RN50", "RN101", "RN50x4", "RN50x16", "ViT-B/32", "ViT-B/16", "ViT-L/14"]')
-        parser.add_argument('--feature_fusion', type=str, default='tf_concat', help='feature fusion method, options are ["tf_concat", "add"]')
+        parser.add_argument('--feature_fusion', type=str, default='tf_concat', help='feature fusion method, options are ["tf_concat", "add", "primser"]')
+        
+        # Multimodal
+        # Freeze PIFu encoder part trained on RenderPeople
+        parser.add_argument('--freeze_encoder', type=bool, default=False, help='freeze encoder part of PIFu')
+        parser.add_argument('--use_dpt', type=bool, default=False, help='use DPT as feature encoder in multimodal learning')
+        parser.add_argument('--dpt_path', type=str, default='./dpt_model/robust_model.pth', help='path to DPT checkpoint')
 
         # special tasks
         self.initialized = True
