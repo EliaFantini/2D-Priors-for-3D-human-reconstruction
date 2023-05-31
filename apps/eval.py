@@ -102,9 +102,16 @@ class Evaluator:
         print('Using Network: ', netG.name)
 
         if opt.load_netG_checkpoint_path:
-            
-            netG.load_state_dict(torch.load(opt.load_netG_checkpoint_path, map_location=cuda))
-            print('net G loaded ...', opt.load_netC_checkpoint_path)
+            if opt.use_clip_encoder:
+                checkpoint = torch.load(opt.load_netG_checkpoint_path)
+                state_dict = checkpoint['state_dict']
+
+                for name, param in netG.named_parameters():
+                    if 'surface_classifier' in name or ('surface_classifier' in name):
+                        param.data.copy_(state_dict[name])
+            else:
+                netG.load_state_dict(torch.load(opt.load_netG_checkpoint_path, map_location=cuda))
+                print('net G loaded ...', opt.load_netC_checkpoint_path)
 
         if opt.load_netC_checkpoint_path is not None:
             print('loading for net C ...', opt.load_netC_checkpoint_path)
