@@ -28,12 +28,12 @@ opt = BaseOptions().parse()
 # Initialize wandb
 wandb.init(project="PIFu", config=opt, entity="visualintelligence")
 
-def train(opt, adapt_sample=5):
+def train(opt):
     # set cuda
     cuda = torch.device('cuda:%d' % opt.gpu_id)
 
     train_dataset = TrainDataset(opt, phase='augment')
-    test_dataset = TrainDataset(opt, phase='test')
+    test_dataset = TrainDataset(opt, phase='augment_test')
 
     projection_mode = train_dataset.projection_mode
 
@@ -94,7 +94,7 @@ def train(opt, adapt_sample=5):
         iter_data_time = time.time()
         for train_idx, train_data in tqdm(enumerate(train_data_loader), total=len(train_data_loader), desc='Training'):
             # if trained with more than adapt_sample, then end this epoch
-            if train_idx >= adapt_sample:
+            if train_idx >= opt.tta_adapt_sample:
                 break
             iter_start_time = time.time()
 

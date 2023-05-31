@@ -123,7 +123,7 @@ class TrainDataset(Dataset):
         if self.phase in ['train', 'test']:
             all_subjects = np.loadtxt(os.path.join(self.root, 'used.txt'), dtype=str) #os.listdir(self.RENDER)
             val_subjects = np.loadtxt(os.path.join(self.root, 'val.txt'), dtype=str)
-        elif self.phase == 'augment':
+        elif self.phase in ['augment', 'augment_test']:
             all_subjects = set()
             num_types = set()
             for file_name in tqdm(os.listdir(self.corruption_folder), desc='Scanning files'):
