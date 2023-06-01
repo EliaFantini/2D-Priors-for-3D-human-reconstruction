@@ -131,6 +131,9 @@ class HGPIFuNet(BasePIFuNet):
                     pathchify_dpt = self.dpt_patchify(normal) # [16, 256, 128]
                     clip_feature = self.clip_proj(clip_feature.float()).unsqueeze(1) # [bz, 128] --> [bz, 1, 128]
                     experts_input = rearrange(torch.cat([patchify_pifu, pathchify_dpt, clip_feature], dim=1), 'b l d -> l b d') # [1281, 16, 128]
+                elif self.opt.prismer_only_clip:
+                    clip_feature = self.clip_proj(clip_feature.float()).unsqueeze(1) # [bz, 128] --> [bz, 1, 128]
+                    experts_input = rearrange(torch.cat([clip_feature], dim=1), 'b l d -> l b d') 
                 else:
                     clip_feature = self.clip_proj(clip_feature.float()).unsqueeze(1) # [bz, 128] --> [bz, 1, 128]
                     experts_input = rearrange(torch.cat([patchify_pifu, clip_feature], dim=1), 'b l d -> l b d') # [1025, 16, 128]

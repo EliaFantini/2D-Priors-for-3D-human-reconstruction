@@ -139,7 +139,7 @@ class BaseOptions():
         parser.add_argument('--freeze_encoder', type=bool, default=False, help='freeze encoder part of PIFu')
         parser.add_argument('--use_dpt', type=bool, default=False, help='use DPT as feature encoder in multimodal learning')
         parser.add_argument('--dpt_path', type=str, default='./dpt_model/robust_model.pth', help='path to DPT checkpoint')
-
+        parser.add_argument('--prismer_only_clip', type=bool, default=False, help='use only clip as feature encoder in multimodal learning')
         # TTA
         parser.add_argument('--tta_adapt_sample', type=int, default=5, help='number of adaptation samples for tta')
         
