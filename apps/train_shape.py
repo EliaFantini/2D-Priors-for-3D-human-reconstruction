@@ -94,6 +94,11 @@ def train(opt):
     opt_log = os.path.join(opt.results_path, opt.name, 'opt.txt')
     with open(opt_log, 'w') as outfile:
         outfile.write(json.dumps(vars(opt), indent=2))
+        
+        
+    total_params = sum(p.numel() for p in netG.parameters())
+    trainable_params = sum(p.numel() for p in netG.parameters() if p.requires_grad)
+    print('total, trainable', total_params, ', ', trainable_params)
 
     # training
     start_epoch = 0 if not opt.continue_train else max(opt.resume_epoch,0)

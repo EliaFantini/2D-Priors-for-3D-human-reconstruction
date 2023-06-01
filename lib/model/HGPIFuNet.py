@@ -124,7 +124,7 @@ class HGPIFuNet(BasePIFuNet):
                 clip_feature_tf = clip_feature.reshape(clip_feature.shape[0], 256, -1)
                 clip_feature_tf = torch.mean(clip_feature_tf, dim=-1)
                 for i in range(len(self.im_feat_list)):
-                    clip_feature_tf = clip_feature_tf.unsqueeze(-1).unsqueeze(-1)
+                    clip_feature_tf = clip_feature_tf # [bz, 256, 1, 1]
                     self.im_feat_list[i] = self.im_feat_list[i] + clip_feature_tf
             elif self.opt.feature_fusion == 'prismer':
                 # pdb.set_trace()
