@@ -11,7 +11,6 @@ import pdb
 from torchvision import transforms
 from .Multimodal import CLIP_Transform, WrapperModel, DataParallelModel, PerceiverResampler, PatchEmbedding
 from .dpt import DPTRegressionModel
-import pdb
 from einops import rearrange
 
 
@@ -123,16 +122,18 @@ class HGPIFuNet(BasePIFuNet):
                 # shape transform from [bz, 256, 3] to [bz, 256, 128, 128]
                 clip_feature_tf = clip_feature.reshape(clip_feature.shape[0], 256, -1)
                 clip_feature_tf = torch.mean(clip_feature_tf, dim=-1)
-                for i in range(len(self.im_feat_list)):
-                    clip_feature_tf = clip_feature_tf # [bz, 256, 1, 1]
-                    self.im_feat_list[i] = self.im_feat_list[i] + clip_feature_tf
+                for i in range(len(self.im_feat_list)): # [bz, 256, 1, 1]
+                    self.im_feat_list[i] = self.im_feat_list[i] + clip_feature_tf.unsqueeze(-1).unsqueeze(-1)
             elif self.opt.feature_fusion == 'prismer':
-                # pdb.set_trace()
-                patchify_pifu = self.pifu_patchify(images) # [bz, 3, 128, 128] --> [16, 64, 128]
-                depth = self.dpt(self.dpt_tf(images)) 
-                pathchify_dpt = self.dpt_patchify(depth) # [16, 256, 128]
-                clip_feature = self.clip_proj(clip_feature.float()).unsqueeze(1) # [bz, 128] --> [bz, 1, 128]
-                experts_input = rearrange(torch.cat([patchify_pifu, pathchify_dpt, clip_feature], dim=1), 'b l d -> l b d') # [321, 16, 128]
+                patchify_pifu = self.pifu_patchify(images) # [bz, 3, 512, 512] --> [16, 1024, 128]
+                if self.opt.use_dpt:
+                    normal = self.dpt(self.dpt_tf(images)) 
+                    pathchify_dpt = self.dpt_patchify(normal) # [16, 256, 128]
+                    clip_feature = self.clip_proj(clip_feature.float()).unsqueeze(1) # [bz, 128] --> [bz, 1, 128]
+                    experts_input = rearrange(torch.cat([patchify_pifu, pathchify_dpt, clip_feature], dim=1), 'b l d -> l b d') # [1281, 16, 128]
+                else:
+                    clip_feature = self.clip_proj(clip_feature.float()).unsqueeze(1) # [bz, 128] --> [bz, 1, 128]
+                    experts_input = rearrange(torch.cat([patchify_pifu, clip_feature], dim=1), 'b l d -> l b d') # [1025, 16, 128]
                 experts_output = self.expert_fusion(experts_input) # [128, bz, 128]
                 experts_output = rearrange(experts_output, 'l b d -> b l d').unsqueeze(1) # [bz, 1, 128, 128]
                 self.im_feat_list = [torch.cat([self.im_feat_list[-1], experts_output], dim=1)] # [bz, 257, 128, 128]
