@@ -16,10 +16,6 @@ def save_names_to_file(directory):
             obj_num = file_name.split('_')[-3]
             all_subjects.add(obj_num)
     print(all_subjects)
-    # Pick the first 5 subjects as the validation set
-    # random.seed(42)  # Fix the random seed for reproducibility
-    # num_samples = int(len(all_subjects) * 0.7)
-    # sampled_subjects = random.sample(all_subjects, num_samples)
     sampled_subjects = sorted(list(all_subjects))[:5]
     
     # Save the sampled names into a text file

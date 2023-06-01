@@ -131,7 +131,6 @@ class Evaluator:
         self.netG = netG
         self.netC = netC
 
-        # def constants(self):# This script is borrowed and extended from https://github.com/nkolot/SPIN/blob/master/constants.py
         self.FOCAL_LENGTH = 5000.
         self.IMG_RES = 224
 
@@ -470,10 +469,7 @@ class Evaluator:
 
         scale = max(height, width) / 180
 
-        # if hps_type == 'hybrik':
         img_np = self.crop_for_hybrik(img_for_crop, center, np.array([scale * 180, scale * 180]))
-        # else:
-        #     img_np, cropping_parameters = crop(img_for_crop, center, scale, (input_res, input_res))
 
         img_pil = Image.fromarray(remove(img_np, post_process_mask=True, session=new_session("u2net")))
         img_mask = torch.tensor(1.0) - (mask_to_tensor(img_pil.split()[-1]) < torch.tensor(0.5)).float()
@@ -489,17 +485,12 @@ class Evaluator:
         projection_matrix = np.identity(4)
         projection_matrix[1, 1] = -1
         calib = torch.Tensor(projection_matrix).float()
-        # Mask
-        # mask = Image.open(mask_path).convert('L')
-        # mask = transforms.Resize(self.load_size)(mask)
-        # mask = transforms.ToTensor()(mask).float()
         # image
         image = Image.open(image_path).convert('RGB')
         mask = remove(image, alpha_matting=True, session=new_session("u2netP"))
         # from mask only get the alpha channel
         mask = mask.split()[-1]
         
-        # mask.save("/home/fantini/PIFu/out.png")
         image = self.to_tensor(image)
         
         
@@ -508,7 +499,6 @@ class Evaluator:
         mask = transforms.ToTensor()(mask).float()
         print(mask.shape)
 
-        #mask = self.create_mask(image_path)
         image = mask.expand_as(image) * image
         return {
             'name': img_name,
@@ -582,26 +572,3 @@ if __name__ == '__main__':
         items.append(item)
         np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
         np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
-        
-    # for image_path in tqdm.tqdm(test_images): # , test_masks)):
-            
-    #     print(image_path) # , mask_path)
-    #     #data = evaluator.load_image(image_path) # , mask_path)
-    #     # metrics calculation
-    #     reconstructed_obj_path = '%s/%s/result_%s.obj' % (results_path, opt.name,  os.path.splitext(os.path.basename(image_path))[0])
-    #     # from all_files get the obj file with the same code as the image, getting it by splitting the path name by "_" and getting the -3 element
-    #     test_obj = [f for f in all_files if 'obj' in f and image_path.split("_")[-3] in f][0]
-    #     print(reconstructed_obj_path)
-    #     print(test_obj)
-    #     mesh_evaluator.set_mesh(reconstructed_obj_path, test_obj)
-    #     vals = []
-    #     vals.append( mesh_evaluator.get_chamfer_dist(500))
-    #     vals.append( mesh_evaluator.get_surface_dist(500))
-    #     item = {
-    #             'name': '%s' % (image_path),
-    #             'vals': vals
-    #         }
-    #     total_vals.append(vals)
-    #     items.append(item)
-    #     np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
-    #     np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
