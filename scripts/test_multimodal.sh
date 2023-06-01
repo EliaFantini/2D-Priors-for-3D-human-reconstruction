@@ -21,6 +21,8 @@ CHECKPOINTS_NETC_PATH='./checkpoints/net_C'
 
 TEST_FOLDER_PATH='/scratch/izar/ckli/corruptions_benchmark/all'
 
+RESULT_FOLDER_PATH='/scratch/izar/ckli/corruptions_benchmark/results'
+
 # command
 CUDA_VISIBLE_DEVICES=${GPU_ID} python ./apps/eval.py \
     --name ${NAME} \
