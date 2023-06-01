@@ -27,8 +27,6 @@ Typical usage:
 
 from __future__ import print_function
 
-# pylint: disable=unused-import,g-import-not-at-top,g-statement-before-imports
-
 try:
   import OpenGL
 except:

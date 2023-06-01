@@ -229,7 +229,6 @@ class Evaluator:
         self.netG = netG
         self.netC = netC
 
-        # def constants(self):# This script is borrowed and extended from https://github.com/nkolot/SPIN/blob/master/constants.py
         self.FOCAL_LENGTH = 5000.
         self.IMG_RES = 224
 
@@ -543,10 +542,6 @@ class Evaluator:
         projection_matrix = np.identity(4)
         projection_matrix[1, 1] = -1
         calib = torch.Tensor(projection_matrix).float()
-        # Mask
-        # mask = Image.open(mask_path).convert('L')
-        # mask = transforms.Resize(self.load_size)(mask)
-        # mask = transforms.ToTensor()(mask).float()
         # image
         image = Image.open(image_path).convert('RGB')
         
@@ -556,7 +551,6 @@ class Evaluator:
         # from mask only get the alpha channel
         mask = mask.split()[-1]
         
-        # mask.save("/home/fantini/PIFu/out.png")
         image = self.to_tensor(image)
         
         
@@ -565,7 +559,6 @@ class Evaluator:
         mask = transforms.ToTensor()(mask).float()
         print(mask.shape)
 
-        #mask = self.create_mask(image_path)
         image = mask.expand_as(image) * image
         return {
             'name': img_name,
