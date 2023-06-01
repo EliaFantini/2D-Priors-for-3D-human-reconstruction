@@ -1,6 +1,7 @@
+from datetime import datetime
+import math
 import sys
 import os
-
 
 from rembg.bg import remove
 import numpy as np
@@ -37,8 +38,14 @@ import tqdm
 
 import trimesh
 
+os.environ['PYOPENGL_PLATFORM'] = 'egl'
 # get options
 opt = BaseOptions().parse()
+
+from camera.camera import Camera
+from raygen import generate_centered_pixel_coords, generate_pinhole_rays, generate_ortho_rays
+from sphere_tracing import sphere_tracing
+
 
 class MeshEvaluator:
     _normal_render = None
@@ -46,12 +53,103 @@ class MeshEvaluator:
     def __init__(self):
         pass
 
+    @staticmethod
+    def init_gl():
+        from lib.renderer.gl.normal_render import NormalRender
+        from lib.renderer.gl.init_gl import initialize_GL_context
+        initialize_GL_context(width=512, height=512, egl=True)
+        MeshEvaluator._normal_render = NormalRender(width=512, height=512)
+
+
     def set_mesh(self, src_path, tgt_path, scale_factor=1.0, offset=0):
         self.src_mesh = trimesh.load(src_path)
         self.tgt_mesh = trimesh.load(tgt_path)
 
         self.scale_factor = scale_factor
         self.offset = offset
+
+
+    def euler_to_rot_mat(self, r_x, r_y, r_z):
+        R_x = np.array([[1, 0, 0],
+                        [0, math.cos(r_x), -math.sin(r_x)],
+                        [0, math.sin(r_x), math.cos(r_x)]
+                        ])
+
+        R_y = np.array([[math.cos(r_y), 0, math.sin(r_y)],
+                        [0, 1, 0],
+                        [-math.sin(r_y), 0, math.cos(r_y)]
+                        ])
+
+        R_z = np.array([[math.cos(r_z), -math.sin(r_z), 0],
+                        [math.sin(r_z), math.cos(r_z), 0],
+                        [0, 0, 1]
+                        ])
+
+        R = np.dot(R_z, np.dot(R_y, R_x))
+
+        return R
+
+    def _render_normal(self, mesh, deg):
+        view_mat = np.identity(4)
+        view_mat[:3, :3] *= 2 / 256
+        rz = deg / 180. * np.pi
+        model_mat = np.identity(4)
+        model_mat[:3, :3] = self.euler_to_rot_mat(0, rz, 0)
+        model_mat[1, 3] = self.offset
+        view_mat[2, 2] *= -1
+
+        self._normal_render.set_matrices(view_mat, model_mat)
+        self._normal_render.set_normal_mesh(self.scale_factor*mesh.vertices, mesh.faces, mesh.vertex_normals, mesh.faces)
+        self._normal_render.draw()
+        normal_img = self._normal_render.get_color()
+        return normal_img
+
+    def _get_reproj_normal_error(self, deg):
+        tgt_normal = self._render_normal(self.tgt_mesh, deg)
+        src_normal = self._render_normal(self.src_mesh, deg)
+
+        error = ((src_normal[:, :, :3] - tgt_normal[:, :, :3]) ** 2).mean() * 3
+
+        return error, src_normal, tgt_normal
+
+    def get_reproj_normal_error(self, frontal=True, back=True, left=True, right=True, save_demo_img=None):
+        print(f"save_demo: {save_demo_img}")
+        # reproj error
+        # if save_demo_img is not None, save a visualization at the given path (etc, "./test.png")
+        if self._normal_render is None:
+            print("In order to use normal render, "
+                  "you have to call init_gl() before initialing any evaluator objects.")
+            return -1
+
+        side_cnt = 0
+        total_error = 0
+        demo_list = []
+        if frontal:
+            side_cnt += 1
+            error, src_normal, tgt_normal = self._get_reproj_normal_error(0)
+            total_error += error
+            demo_list.append(np.concatenate([src_normal, tgt_normal], axis=0))
+        if back:
+            side_cnt += 1
+            error, src_normal, tgt_normal = self._get_reproj_normal_error(180)
+            total_error += error
+            demo_list.append(np.concatenate([src_normal, tgt_normal], axis=0))
+        if left:
+            side_cnt += 1
+            error, src_normal, tgt_normal = self._get_reproj_normal_error(90)
+            total_error += error
+            demo_list.append(np.concatenate([src_normal, tgt_normal], axis=0))
+        if right:
+            side_cnt += 1
+            error, src_normal, tgt_normal = self._get_reproj_normal_error(270)
+            total_error += error
+            demo_list.append(np.concatenate([src_normal, tgt_normal], axis=0))
+        if save_demo_img is not None:
+            res_array = np.concatenate(demo_list, axis=1)
+            #res_img = Image.fromarray((res_array * 255).astype(np.uint8))
+            res_img = Image.fromarray((tgt_normal * 255).astype(np.uint8))
+            res_img.save(save_demo_img)
+        return total_error / side_cnt
 
 
     def get_chamfer_dist(self, num_samples=10000):
@@ -131,7 +229,6 @@ class Evaluator:
         self.netG = netG
         self.netC = netC
 
-        # def constants(self):# This script is borrowed and extended from https://github.com/nkolot/SPIN/blob/master/constants.py
         self.FOCAL_LENGTH = 5000.
         self.IMG_RES = 224
 
@@ -414,6 +511,7 @@ class Evaluator:
         dst_h = output_size[1]
 
         rot_rad = np.pi * rot / 180
+    
         src_dir = get_dir([0, src_w * -0.5], rot_rad)
         dst_dir = np.array([0, dst_w * -0.5], np.float32)
 
@@ -434,52 +532,7 @@ class Evaluator:
 
         return trans
 
-    def create_mask(self, img_file, hps_type='hybrik', input_res=512):
-        """Read image, do preprocessing and possibly crop it according to the bounding box.
-        If there are bounding box annotations, use them to crop the image.
-        If no bounding box is specified but openpose detections are available, use them to get the bounding box.
-        """
-
-        [
-            image_to_tensor, mask_to_tensor, image_to_pymaf_tensor, image_to_pixie_tensor,
-            image_to_hybrik_tensor
-        ] = self.get_transformer(input_res)
-
-        img_ori = self.load_img(img_file)
-
-        in_height, in_width, _ = img_ori.shape
-        M = self.aug_matrix(in_width, in_height, input_res * 2, input_res * 2)
-
-        # from rectangle to square
-        img_for_crop = cv2.warpAffine(
-            img_ori, M[0:2, :], (input_res * 2, input_res * 2), flags=cv2.INTER_CUBIC
-        )
-
-        # detection for bbox
-        detector = detection.maskrcnn_resnet50_fpn(pretrained=True)
-        detector.eval()
-        predictions = detector([torch.from_numpy(img_for_crop).permute(2, 0, 1) / 255.])[0]
-        human_ids = torch.where(
-            predictions["scores"] == predictions["scores"][predictions['labels'] == 1].max()
-        )
-        bbox = predictions["boxes"][human_ids, :].flatten().detach().cpu().numpy()
-
-        width = bbox[2] - bbox[0]
-        height = bbox[3] - bbox[1]
-        center = np.array([(bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0])
-
-        scale = max(height, width) / 180
-
-        # if hps_type == 'hybrik':
-        img_np = self.crop_for_hybrik(img_for_crop, center, np.array([scale * 180, scale * 180]))
-        # else:
-        #     img_np, cropping_parameters = crop(img_for_crop, center, scale, (input_res, input_res))
-
-        img_pil = Image.fromarray(remove(img_np, post_process_mask=True, session=new_session("u2net")))
-        img_mask = torch.tensor(1.0) - (mask_to_tensor(img_pil.split()[-1]) < torch.tensor(0.5)).float()
-
-        return img_mask
-
+    
     def load_image(self, image_path): # , mask_path):
         # Name
         img_name = os.path.splitext(os.path.basename(image_path))[0]
@@ -489,17 +542,15 @@ class Evaluator:
         projection_matrix = np.identity(4)
         projection_matrix[1, 1] = -1
         calib = torch.Tensor(projection_matrix).float()
-        # Mask
-        # mask = Image.open(mask_path).convert('L')
-        # mask = transforms.Resize(self.load_size)(mask)
-        # mask = transforms.ToTensor()(mask).float()
         # image
         image = Image.open(image_path).convert('RGB')
+        
         mask = remove(image, alpha_matting=True, session=new_session("u2netP"))
+
+            
         # from mask only get the alpha channel
         mask = mask.split()[-1]
         
-        # mask.save("/home/fantini/PIFu/out.png")
         image = self.to_tensor(image)
         
         
@@ -508,7 +559,6 @@ class Evaluator:
         mask = transforms.ToTensor()(mask).float()
         print(mask.shape)
 
-        #mask = self.create_mask(image_path)
         image = mask.expand_as(image) * image
         return {
             'name': img_name,
@@ -518,8 +568,94 @@ class Evaluator:
             'b_min': B_MIN,
             'b_max': B_MAX,
         }
+    
+    def render(self, data, output_path):
+        look_at = torch.zeros( (4, 3), dtype=torch.float32, device=self.cuda)
+        camera_position = torch.tensor( [ [0, 0, 2],
+                                        [2, 0, 0],
+                                        [0, 0, -2],
+                                        [-2, 0, 0]  ]  , dtype=torch.float32, device=self.cuda)
+        for i in range(4):
+            camera_up_direction = torch.tensor( [[0, 1, 0]], dtype=torch.float32, device=self.cuda).repeat(4, 1,)
 
-    def eval(self, data, use_octree=False):
+            camera = Camera.from_args(eye=camera_position[i],
+                                        at=look_at[0],
+                                        up=camera_up_direction[0],
+                                        fov_distance=1,
+                                        width=512,
+                                        height=512,
+                                        dtype=torch.float32)
+
+            ray_grid = generate_centered_pixel_coords(camera.width, camera.height,
+                                                            camera.width, camera.height, device=self.cuda)
+
+                
+            #ray_orig, ray_dir = generate_pinhole_rays(camera.to(ray_grid[0].device), ray_grid)
+            ray_orig, ray_dir = generate_ortho_rays(camera.to(ray_grid[0].device), ray_grid)
+
+            
+            data['img'] = data['img'].to(self.cuda)
+            self.netG.filter(data['img'])
+            self.netC.filter(data['img'])
+            self.netC.attach(self.netG.get_im_feat())
+            
+
+            points_on_surface, _ ,_ , hit, _ = sphere_tracing(self.netG,ray_orig,ray_dir,data['calib'], 
+                                                        device=self.cuda )
+        
+            points_on_surface = points_on_surface[hit].unsqueeze(0)
+
+            points_on_surface = torch.transpose(points_on_surface, 1, 2)
+            """print(points_on_surface.shape)
+            print(hit.shape)
+            self.netC.query(points_on_surface[0, :, :].to(self.cuda), data['calib'].to(self.cuda))
+            aa = self.netC.get_preds()
+            print(aa.shape)
+            print(aa.max())
+            print(aa.min())
+            print(aa)"""
+
+            color = np.zeros([262144,3])
+            self.netC.query(points_on_surface.to(self.cuda), data['calib'].to(self.cuda))
+            rgb =  self.netC.get_preds()
+            rgb = self.netC.get_preds()[0].detach().cpu().numpy() * 0.5 + 0.5
+            color[hit.cpu().numpy()[0,:]] = rgb.T
+            """print("########## points_on_surface shape :", points_on_surface.shape)
+            interval = 10000
+            print("########## len color :", points_on_surface.shape[2])
+            for i in range(points_on_surface.shape[2] // interval):
+                left = i * interval
+                right = i * interval + interval
+                if i == points_on_surface.shape[2] // interval - 1:
+                    right = -1
+                print("input netC shape:", points_on_surface[:, :, left:right].shape)
+                print("input calib shape:", data['calib'].shape)
+                print("input  :",points_on_surface[:, :, 0])
+                print("calib  :",data['calib'])
+                self.netC.query(points_on_surface[:, :, left:right].to(self.cuda), data['calib'].to(self.cuda))
+                rgb =  self.netC.get_preds()
+                print("rgb shape:", rgb.shape)
+                print("rgb :", rgb)
+                print("rgb min:", rgb.min())
+                print("rgb max:", rgb.max())
+                rgb = self.netC.get_preds()[0].detach().cpu().numpy() * 0.5 + 0.5
+                print("rgb shape:", rgb.shape)
+                print("rgb :", rgb)
+                print("rgb min:", rgb.min())
+                print("rgb max:", rgb.max())    
+                color[left:right] = rgb.T
+            print(color.shape)
+            print(color.max())
+            print(color.min())
+            print(color)"""
+            color = color*255
+            color = color.reshape(512,512,3)
+            rendering = Image.fromarray(color.astype(np.uint8))
+            rendering.save(output_path + f"/out_diff_rendering_{i}.png")
+            print("RENDERING DONE")
+    
+
+    def eval(self, data, use_octree=False, path=None):
         '''
         Evaluate a data point
         :param data: a dict containing at least ['name'], ['image'], ['calib'], ['b_min'] and ['b_max'] tensors.
@@ -530,7 +666,11 @@ class Evaluator:
             self.netG.eval()
             if self.netC:
                 self.netC.eval()
-            save_path = '%s/%s/result_%s.obj' % ("/scratch/izar/ckli/corruptions_benchmark/all/results_24", opt.name, data['name'])
+            save_path = '%s/result_%s.obj' % (path, data['name'])
+
+            #self.render(data, output_path="/home/fantini/CS-503-Chengkun-Fantini-Liu")
+            
+
             if self.netC:
                 gen_mesh_color(opt, self.netG, self.netC, self.cuda, data, save_path, use_octree=use_octree)
             else:
@@ -538,14 +678,22 @@ class Evaluator:
 
 
 if __name__ == '__main__':
+    import warnings
+    warnings.filterwarnings("ignore") 
     evaluator = Evaluator(opt)
     mesh_evaluator = MeshEvaluator()
-    mesh_evaluator.__init__()
-    
+    #mesh_evaluator.init_gl()
 
-    all_files = glob.glob(os.path.join(opt.test_folder_path, '*'))
-    eval_objs = ['0029', '0031', '0049', '0101', '0109'] # hard coded for now; testing on 5 objects
+    DATA_PATH = '/scratch/izar/fantini/results/eval_baseline'
+
+    if not os.path.exists(DATA_PATH):
+        os.makedirs(DATA_PATH)
+    
+    print("test folder path: ", DATA_PATH)
+    all_files = glob.glob(os.path.join(DATA_PATH, '*'))
+    eval_objs = ['0505', '0510', '0512', '0515', '0524'] # hard coded for now; testing on 5 objects
     test_images = [f for f in all_files if ('png' in f or 'jpg' in f) and (not 'mask' in f) and any(obj in f for obj in eval_objs)]
+    #test_images = [f for f in all_files if ('png' in f or 'jpg' in f) and (not 'mask' in f)]
     rendered_images = []
     mask_images = []
 
@@ -556,24 +704,37 @@ if __name__ == '__main__':
 
     total_vals = []
     items = []
- 
-    results_path = "/scratch/izar/ckli/corruptions_benchmark/all/results_24"
+    
+    # get a timestamp for the results folder and make it a string
+    now = datetime.now()
+
+    folder_name = now.strftime("day_%Y_%m_%d_time_%H_%M_%S")
+    print("date and time:",folder_name)
+
+    #results_path = os.path.join(DATA_PATH, "results", folder_name)
+    results_path = f"/scratch/izar/fantini/results/eval_baseline/results/{folder_name}"
+    # if folder doesn't exist, create it
+    if not os.path.exists(results_path):
+        os.makedirs(results_path)
+        
 
     for image_path in tqdm.tqdm(test_images): # , test_masks)):
             
         print(image_path) # , mask_path)
         data = evaluator.load_image(image_path) # , mask_path)
-        evaluator.eval(data, True)
+        evaluator.eval(data, True, results_path)
         # metrics calculation
-        reconstructed_obj_path = '%s/%s/result_%s.obj' % (results_path, opt.name, data['name'])
+        reconstructed_obj_path = '%s/result_%s.obj' % (results_path, data['name'])
+        print(f"reconstructed_obj_path: {reconstructed_obj_path}")
         # from all_files get the obj file with the same code as the image, getting it by splitting the path name by "_" and getting the -3 element
         test_obj = [f for f in all_files if 'obj' in f and image_path.split("_")[-3] in f][0]
-        print(reconstructed_obj_path)
-        print(test_obj)
+        print(f"test_obj: {test_obj}")
         mesh_evaluator.set_mesh(reconstructed_obj_path, test_obj)
         vals = []
         vals.append(0.1 * mesh_evaluator.get_chamfer_dist(500))
         vals.append(0.1 * mesh_evaluator.get_surface_dist(500))
+        #vals.append(4.0 * mesh_evaluator.get_reproj_normal_error(save_demo_img=os.path.join(results_path, data['name'] + '_try.png')))
+        print(f"vals: {vals}")
         item = {
                 'name': '%s' % (image_path),
                 'vals': vals
@@ -582,26 +743,4 @@ if __name__ == '__main__':
         items.append(item)
         np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
         np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
-        
-    # for image_path in tqdm.tqdm(test_images): # , test_masks)):
-            
-    #     print(image_path) # , mask_path)
-    #     #data = evaluator.load_image(image_path) # , mask_path)
-    #     # metrics calculation
-    #     reconstructed_obj_path = '%s/%s/result_%s.obj' % (results_path, opt.name,  os.path.splitext(os.path.basename(image_path))[0])
-    #     # from all_files get the obj file with the same code as the image, getting it by splitting the path name by "_" and getting the -3 element
-    #     test_obj = [f for f in all_files if 'obj' in f and image_path.split("_")[-3] in f][0]
-    #     print(reconstructed_obj_path)
-    #     print(test_obj)
-    #     mesh_evaluator.set_mesh(reconstructed_obj_path, test_obj)
-    #     vals = []
-    #     vals.append( mesh_evaluator.get_chamfer_dist(500))
-    #     vals.append( mesh_evaluator.get_surface_dist(500))
-    #     item = {
-    #             'name': '%s' % (image_path),
-    #             'vals': vals
-    #         }
-    #     total_vals.append(vals)
-    #     items.append(item)
-    #     np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
-    #     np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
+    

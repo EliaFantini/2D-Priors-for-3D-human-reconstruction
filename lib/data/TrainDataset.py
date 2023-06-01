@@ -217,7 +217,6 @@ class TrainDataset(Dataset):
             center = param.item().get('center')
             # model rotation
             R = param.item().get('R')
-            # TODO roll_matrix
             if 'roll' in corr_type:
                 angle = int(corr_type.split('_')[1])
                 # roll matrix is a rotation matrix around z axis counterclockwise for 80 degrees
@@ -358,9 +357,6 @@ class TrainDataset(Dataset):
         samples = np.concatenate([inside_points, outside_points], 0).T
         labels = np.concatenate([np.ones((1, inside_points.shape[0])), np.zeros((1, outside_points.shape[0]))], 1)
 
-        # save_samples_truncted_prob('out.ply', samples.T, labels.T)
-        # exit()
-
         samples = torch.Tensor(samples).float()
         labels = torch.Tensor(labels).float()
         
@@ -466,24 +462,9 @@ class TrainDataset(Dataset):
         if self.opt.num_sample_inout:
             sample_data = self.select_sampling_method(subject)
             res.update(sample_data)
-        
-        # img = np.uint8((np.transpose(render_data['img'][0].numpy(), (1, 2, 0)) * 0.5 + 0.5)[:, :, ::-1] * 255.0)
-        # rot = render_data['calib'][0,:3, :3]
-        # trans = render_data['calib'][0,:3, 3:4]
-        # pts = torch.addmm(trans, rot, sample_data['samples'][:, sample_data['labels'][0] > 0.5])  # [3, N]
-        # pts = 0.5 * (pts.numpy().T + 1.0) * render_data['img'].size(2)
-        # for p in pts:
-        #     img = cv2.circle(img, (p[0], p[1]), 2, (0,255,0), -1)
-        # cv2.imshow('test', img)
-        # cv2.waitKey(1)
-
         if self.num_sample_color:
             color_data = self.get_color_sampling(subject, yid=yid, pid=pid)
             res.update(color_data)
         return res
-        # except Exception as e:
-        #     print(e)
-        #     return self.get_item(index=random.randint(0, self.__len__() - 1))
-
     def __getitem__(self, index):
         return self.get_item(index)
