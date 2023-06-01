@@ -1,91 +1,92 @@
-# Potential of 2D Priors for Improving Robustness of Ill-Posed 3D Reconstruction
+## Potential of 2D Priors for Improving Robustness of Ill-Posed 3D Reconstruction
+---
 
-This repository contains code for the experiments for the EPFL CS 503 Visual Intelligence project. 
+This repository contains code for the experiments of our project for EPFL CS 503 Visual Intelligence. 
 
-## Table of Contents
+In this project we focus on the problem of comprehensive
+human full-body mesh reconstruction from a single image,
+which is assumed to be taken in daily settings. We tackle the problem of lack of information and corruption by integrating different 2D priors into the workflow to
+enhance the robustness of 3D generative models. In other words, we enhance 3D generative performance by leveraging pretrained 2D priors, and investigate different integration techniques for best performance. 
 
+<p align="center" width="100%">
+    <img width="60%" src="img/3DRecontruction.gif">
+</p>
+
+## Contents
+---
 - [Potential of 2D Priors for Improving Robustness of Ill-Posed 3D Reconstruction](#potential-of-2d-priors-for-improving-robustness-of-ill-posed-3d-reconstruction)
-  - [Table of Contents](#table-of-contents)
-  - [Training and Evaluating the models](#training-and-evaluating-the-models)
-    - [TTA on Vanilla PIFu](#tta-on-vanilla-pifu)
-    - [Train the model with DPT and CLIP](#train-the-model-with-dpt-and-clip)
-    - [Train the model with only CLIP](#train-the-model-with-only-clip)
-    - [Train the baseline geometric network](#train-the-baseline-geometric-network)
-    - [Train the baseline geometric network with CLIP](#train-the-baseline-geometric-network-with-clip)
+- [Contents](#contents)
+  - [Usage](#usage)
   - [Code](#code)
-    - [Models, data and rendering](#models-data-and-rendering)
-    - [Data augmentation via corruption](#data-augmentation-via-corruption)
-    - [Training and evaluating](#training-and-evaluating)
-  - [Procedure to build the environment needed to run the code](#procedure-to-build-the-environment-needed-to-run-the-code)
-    - [For original PIFu](#for-original-pifu)
-    - [For PIFuHD](#for-pifuhd)
+  - [Build the environment](#build-the-environment)
 
 
-## Training and Evaluating the models 
+### Usage 
 
-To run the code, use the following prompts: 
+To train and Evaluate the models using the code, use the following prompts: 
 
-### TTA on Vanilla PIFu 
+```
+############## TTA on Vanilla PIFu ##############
 
-Train for 5 epochs 
+# Train for 5 epochs 
 
-`python -m apps.train_tta --dataroot <path/to/the/dataset>  --checkpoints_path ./tta_baseline_5_sample --load_netG_checkpoint_path <path/to/PIFu/net_G> vanilla-baseline/netG_epoch_10  --batch_size 16 --tta_adapt_sample 5 --num_epoch 5`
+python -m apps.train_tta --dataroot <path/to/the/dataset>  --checkpoints_path ./tta_baseline_5_sample --load_netG_checkpoint_path <path/to/PIFu/net_G> vanilla-baseline/netG_epoch_10  --batch_size 16 --tta_adapt_sample 5 --num_epoch 5
 
-### Train the model with DPT and CLIP
+############## Train the model with DPT and CLIP ##############
 
-With a MLP (multi-player perception) with size `258 -> 1024 -> 512 -> 256 -> 128 -> 1`. 
+# With a MLP (multi-player perception) with size `258 -> 1024 -> 512 -> 256 -> 128 -> 1`. 
 
-Train from fresh for 5 epochs 
-`python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --use_dpt True --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True`
+# Train from fresh for 5 epochs 
+python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --use_dpt True --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True
 
-Continue training 
-`CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --use_dpt True --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True --continue_train --checkpoints_path <path/to/PIFu/primser> --resume_epoch 3`
+# Continue training 
+CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --use_dpt True --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True --continue_train --checkpoints_path <path/to/PIFu/primser> --resume_epoch 3
 
-### Train the model with only CLIP 
+############## Train the model with only CLIP ##############
 
-Train for 5 epochs from fresh 
+# Train for 5 epochs from fresh 
+python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1  --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True
 
-`python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1  --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True`
+############## Train the baseline geometric network ##############
 
-### Train the baseline geometric network
+# Train for 10 epochs from fresh 
 
-Train for 10 epochs from fresh 
+python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16  --gpu_ids "0,1" --num_epoch 10
 
-`python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16  --gpu_ids "0,1" --num_epoch 10`
+# Continune training 
 
-Continune training 
+CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16   --num_epoch 30 --pin_memory --continue_train --resume_epoch 9 --checkpoints_path ./baseline_G --name vanilla-baseline
 
-`CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16   --num_epoch 30 --pin_memory --continue_train --resume_epoch 9 --checkpoints_path ./baseline_G --name vanilla-baseline`
+############## Train the baseline geometric network with CLIP ##############
 
-### Train the baseline geometric network with CLIP 
+# Train for 5 epochs from fresh 
+python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_clip_G --batch_size 16  --num_epoch 5 --name clip_baseline --feature_fusion add --learning_rate 0.001 --use_clip_encoder True
 
-Train for 5 epochs from fresh 
-`python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_clip_G --batch_size 16  --num_epoch 5 --name clip_baseline --feature_fusion add --learning_rate 0.001 --use_clip_encoder True`
+# Continue training 
 
-Continue training 
+python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_clip_G --batch_size 16  --num_epoch 5 --name clip_baseline --feature_fusion add --learning_rate 0.001 --continue_train --resume_epoch 4
+```
 
-`python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_clip_G --batch_size 16  --num_epoch 5 --name clip_baseline --feature_fusion add --learning_rate 0.001 --continue_train --resume_epoch 4`
-
-## Code 
-### Models, data and rendering
+### Code 
+---
+**Models, data and rendering**
 Our backbone is PIFu model. We included the vanilla PIFu model, PIFu variants, PIFu with CLIP loss, and other helper functions in the folder `lib/model`. The train and evaluation dataset fed into the network are processed by the code in `lib/data`. 
 
 During the training, we need to render images of the specified angles from the human mesh models, and the code for rendering are in the folder `lib/renderer`. 
 
 Other files under the `lib` directory are also helper functions for the training. 
 
-### Data augmentation via corruption 
+**Data augmentation via corruption**
 
 We augment the dataset by corrupting part of the rendered images, and the code for creating the dataset is in the folder `data/3d_common_corruptions/create_3dcc/motions_video`. 
 
-### Training and evaluating
+**Training and evaluating**
 The code for training and evaluating, and also the camera settings are in the folder `apps`. 
 
-## Procedure to build the environment needed to run the code
-
-### For original PIFu 
-
+### Build the environment 
+---
 ```
+############## For original PIFu ##############
 conda create -n orig_pifu python=3.8
 conda activate orig_pifu 
 
@@ -105,10 +106,8 @@ pip install numpy==1.22.4
 # in case of error "cannot marching cubes"
 # Open PIFu/lib/mesh_util.py and change line 45 to:
 # verts, faces, normals, values = measure.marching_cubes(sdf, 0.5)
-```
 
-### For PIFuHD
-```
+############## For PIFuHD ##############
 pip install pyembree
 # conda install -c conda-forge pyembree
 pip install PyOpenGL
