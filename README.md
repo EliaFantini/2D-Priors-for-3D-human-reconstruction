@@ -64,7 +64,7 @@ python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path 
 ```
 
 ### Code 
----
+
 **Models, data and rendering**
 Our backbone is PIFu model. We included the vanilla PIFu model, PIFu variants, PIFu with CLIP loss, and other helper functions in the folder `lib/model`. The train and evaluation dataset fed into the network are processed by the code in `lib/data`. 
 
@@ -80,7 +80,6 @@ We augment the dataset by corrupting part of the rendered images, and the code f
 The code for training and evaluating, and also the camera settings are in the folder `apps`. 
 
 ### Build the environment 
----
 ```
 ############## For original PIFu ##############
 conda create -n orig_pifu python=3.8
