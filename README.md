@@ -1,5 +1,4 @@
 ## Potential of 2D Priors for Improving Robustness of Ill-Posed 3D Reconstruction
----
 
 This repository contains code for the experiments of our project for EPFL CS 503 Visual Intelligence. 
 
@@ -13,12 +12,9 @@ enhance the robustness of 3D generative models. In other words, we enhance 3D ge
 </p>
 
 ## Contents
----
-- [Potential of 2D Priors for Improving Robustness of Ill-Posed 3D Reconstruction](#potential-of-2d-priors-for-improving-robustness-of-ill-posed-3d-reconstruction)
-- [Contents](#contents)
-  - [Usage](#usage)
-  - [Code](#code)
-  - [Build the environment](#build-the-environment)
+- [Usage](#usage)
+- [Code](#code)
+- [Build the environment](#build-the-environment)
 
 
 ### Usage 
