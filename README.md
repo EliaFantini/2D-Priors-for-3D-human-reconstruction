@@ -12,10 +12,49 @@ enhance the robustness of 3D generative models. In other words, we enhance 3D ge
 </p>
 
 ## Contents
-- [Usage](#usage)
-- [Code](#code)
-- [Build the environment](#build-the-environment)
+- [Potential of 2D Priors for Improving Robustness of Ill-Posed 3D Reconstruction](#potential-of-2d-priors-for-improving-robustness-of-ill-posed-3d-reconstruction)
+- [Contents](#contents)
+  - [Build the environment](#build-the-environment)
+  - [Usage](#usage)
+  - [Code](#code)
+  - [Data Augmentation](#data-augmentation)
 
+### Build the environment 
+```
+############## For original PIFu ##############
+conda create -n orig_pifu python=3.8
+conda activate orig_pifu 
+
+conda install pytorch==1.13.0 torchvision==0.14.0 pytorch-cuda=11.6 -c pytorch -c nvidia
+conda install pillow
+conda install scikit-image
+conda install tqdm
+
+pip install numpy cython
+pip install menpo
+pip install opencv-python
+
+# in case of error with numpy
+pip uninstall numpy
+pip install numpy==1.22.4
+
+# in case of error "cannot marching cubes"
+# Open PIFu/lib/mesh_util.py and change line 45 to:
+# verts, faces, normals, values = measure.marching_cubes(sdf, 0.5)
+
+############## For PIFuHD ##############
+pip install pyembree
+# conda install -c conda-forge pyembree
+pip install PyOpenGL
+# freeglut (use sudo apt-get install freeglut3-dev for ubuntu users)
+# this one we can't do it
+pip install ffmpeg
+
+pip install rembg[gpu]
+
+pip uninstall numpy
+pip install numpy==1.22.4
+```
 
 ### Usage 
 
@@ -80,39 +119,13 @@ We augment the dataset by corrupting part of the rendered images, and the code f
 **Training and evaluating**
 The code for training and evaluating, and also the camera settings are in the folder `apps`. 
 
-### Build the environment 
+### Data Augmentation 
+
+In this project, we augment the dataset with corrupted images. We borrowed part of the code from the paper: [**3D Common Corruptions and Data Augmentation**](https://3dcommoncorruptions.epfl.ch/). 
+
+We utilize 4 different kinds of corruptions, including low_light, iso_noise, camera_roll, and zoom_blur. Specifically, for each model, we have 360 rendered images from 360 different angles. For each model's rendered images, we pick `1/5` of data for each kind of corruption and leave the rest `1/5` as they are. 
+
+To corrupted the images, use the command line
 ```
-############## For original PIFu ##############
-conda create -n orig_pifu python=3.8
-conda activate orig_pifu 
-
-conda install pytorch==1.13.0 torchvision==0.14.0 pytorch-cuda=11.6 -c pytorch -c nvidia
-conda install pillow
-conda install scikit-image
-conda install tqdm
-
-pip install numpy cython
-pip install menpo
-pip install opencv-python
-
-# in case of error with numpy
-pip uninstall numpy
-pip install numpy==1.22.4
-
-# in case of error "cannot marching cubes"
-# Open PIFu/lib/mesh_util.py and change line 45 to:
-# verts, faces, normals, values = measure.marching_cubes(sdf, 0.5)
-
-############## For PIFuHD ##############
-pip install pyembree
-# conda install -c conda-forge pyembree
-pip install PyOpenGL
-# freeglut (use sudo apt-get install freeglut3-dev for ubuntu users)
-# this one we can't do it
-pip install ffmpeg
-
-pip install rembg[gpu]
-
-pip uninstall numpy
-pip install numpy==1.22.4
+python -m data.3d_common_corruptions.create_3dcc.corrupt.py --RENDER_PATH <path/to/the/rendered/images> --MASK_PATH <path/to/the/masks>
 ```
