@@ -7,6 +7,11 @@ This repository contains code for the experiments for the EPFL CS 503 Visual Int
 - [Potential of 2D Priors for Improving Robustness of Ill-Posed 3D Reconstruction](#potential-of-2d-priors-for-improving-robustness-of-ill-posed-3d-reconstruction)
   - [Table of Contents](#table-of-contents)
   - [Training and Evaluating the models](#training-and-evaluating-the-models)
+    - [TTA on Vanilla PIFu](#tta-on-vanilla-pifu)
+    - [Train the model with DPT and CLIP](#train-the-model-with-dpt-and-clip)
+    - [Train the model with only CLIP](#train-the-model-with-only-clip)
+    - [Train the baseline geometric network](#train-the-baseline-geometric-network)
+    - [Train the baseline geometric network with CLIP](#train-the-baseline-geometric-network-with-clip)
   - [Code](#code)
     - [Models, data and rendering](#models-data-and-rendering)
     - [Data augmentation via corruption](#data-augmentation-via-corruption)
@@ -18,20 +23,46 @@ This repository contains code for the experiments for the EPFL CS 503 Visual Int
 
 ## Training and Evaluating the models 
 
-To run the code, use the following prompt: 
+To run the code, use the following prompts: 
 
-For training the baseline geometric network
+### TTA on Vanilla PIFu 
+
+Train for 5 epochs 
+
+`python -m apps.train_tta --dataroot <path/to/the/dataset>  --checkpoints_path ./tta_baseline_5_sample --load_netG_checkpoint_path <path/to/PIFu/net_G> vanilla-baseline/netG_epoch_10  --batch_size 16 --tta_adapt_sample 5 --num_epoch 5`
+
+### Train the model with DPT and CLIP
+
+With a MLP (multi-player perception) with size `258 -> 1024 -> 512 -> 256 -> 128 -> 1`. 
+
+Train from fresh for 5 epochs 
+`python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --use_dpt True --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True`
+
+Continue training 
+`CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --use_dpt True --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True --continue_train --checkpoints_path <path/to/PIFu/primser> --resume_epoch 3`
+
+### Train the model with only CLIP 
+
+Train for 5 epochs from fresh 
+
+`python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1  --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True`
+
+### Train the baseline geometric network
+
+Train for 10 epochs from fresh 
 
 `python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16  --gpu_ids "0,1" --num_epoch 10`
 
-For continuning training shape network baseline
+Continune training 
 
 `CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16   --num_epoch 30 --pin_memory --continue_train --resume_epoch 9 --checkpoints_path ./baseline_G --name vanilla-baseline`
 
-For training the baseline geometric network with CLIP
+### Train the baseline geometric network with CLIP 
+
+Train for 5 epochs from fresh 
 `python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_clip_G --batch_size 16  --num_epoch 5 --name clip_baseline --feature_fusion add --learning_rate 0.001 --use_clip_encoder True`
 
-For continuing training shape network with CLIP 
+Continue training 
 
 `python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_clip_G --batch_size 16  --num_epoch 5 --name clip_baseline --feature_fusion add --learning_rate 0.001 --continue_train --resume_epoch 4`
 
