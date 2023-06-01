@@ -10,6 +10,9 @@ import cv2
 from PIL import Image
 import sys
 import clip
+import pickle
+import matplotlib.pyplot as plt
+import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 ROOT_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,7 +49,8 @@ opt = BaseOptions().parse()
 from camera.camera import Camera
 from raygen import generate_centered_pixel_coords, generate_pinhole_rays, generate_ortho_rays
 from sphere_tracing import sphere_tracing
-
+from metrics import PSNR
+from pytorch_msssim import ssim
 
 class MeshEvaluator:
     _normal_render = None
@@ -567,9 +571,9 @@ class Evaluator:
             'mask': mask.unsqueeze(0),
             'b_min': B_MIN,
             'b_max': B_MAX,
-        }
-    
-    def render(self, data, output_path):
+    }
+    def clip_loss_tta_average(self, data, output_path, gt_images_path, roll):
+        psnr = PSNR()
         def set_train():
             self.netG.eval()
             self.netC.train()
@@ -591,7 +595,7 @@ class Evaluator:
             return feat
 
         
-        lr = 1e-4
+        lr = 1e-3
         optimizerC = torch.optim.Adam(self.netC.parameters(), lr=lr)
         num_iters = 100
         set_eval()
@@ -619,7 +623,7 @@ class Evaluator:
                 camera = Camera.from_args(eye=camera_position[i],
                                             at=look_at[0],
                                             up=camera_up_direction[0],
-                                            fov=10,
+                                            fov_distance=1,
                                             width=512,
                                             height=512,
                                             dtype=torch.float32)
@@ -628,8 +632,8 @@ class Evaluator:
                                                                 camera.width, camera.height, device=self.cuda)
 
                 
-                ray_orig, ray_dir = generate_pinhole_rays(camera.to(ray_grid[0].device), ray_grid)
-                #ray_orig, ray_dir = generate_ortho_rays(camera.to(ray_grid[0].device), ray_grid)
+                #ray_orig, ray_dir = generate_pinhole_rays(camera.to(ray_grid[0].device), ray_grid)
+                ray_orig, ray_dir = generate_ortho_rays(camera.to(ray_grid[0].device), ray_grid)
 
                 
                 
@@ -649,10 +653,231 @@ class Evaluator:
                 hits.append(hit)
                 
         print("\nFinetuning:")
+        target_clip = get_clip_feature(data['img'])
+        clip_loss_list = []
+        psnr_loss_list = []
+        ssim_loss_list = []
+        clip_comparison_list = []
         for iteration in tqdm.tqdm(range(num_iters)):
+            rendered_clip = None
+            psnr_loss = 0
+            ssim_loss = 0
+            gt_clip = None
+            for j in range(4):
+            
+                set_train()
+                optimizerC.zero_grad()
+
+                color = torch.zeros([262144,3], device = self.cuda)
+                rgb , _ = self.netC.forward(data['img'], None, points_on_surfaces[j],  data['calib'], None, only_query = True )
+                rgb = rgb[0]*0.5 + 0.5
+                
+                
+                color[hits[j][0,:]] = rgb.T
+                color = color.reshape(512,512,3)
+                color = torch.permute(color, (2,0,1))
+                color = color.unsqueeze(0)
+
+                if rendered_clip is None:
+                    rendered_clip = get_clip_feature(color)
+                else:
+                    rendered_clip += get_clip_feature(color)
+                
+                if output_path is not None:
+                    directions = ["front", "right","back","left"]
+                    rendered_image = np.zeros([262144,3])
+                    rgb_copy = torch.tensor(rgb, requires_grad = False)
+                    rgb_copy = rgb_copy.cpu().numpy()
+                    rendered_image[hits[j].cpu().numpy()[0,:]] = rgb_copy.T
+                    rendered_image = rendered_image*255
+                    rendered_image = rendered_image.reshape(512,512,3)
+                    rendering = Image.fromarray(rendered_image.astype(np.uint8))
+                    index = "{:04d}".format(iteration)
+                    rendering.save(output_path + f"/{index}_{directions[j]}_render.png")
+                with torch.no_grad():
+                # load the image in gt_images_path[i] and compute the psnr and ssim
+                    
+
+                    if roll:
+                        
+                        gt_image = cv2.imread(gt_images_path[j])
+                        # get the image size
+                        h, w = gt_image.shape[:2]
+                        # define the rotation matrix
+                        M = cv2.getRotationMatrix2D((w/2, h/2), 80, 1)
+                        
+                        # rotate the image
+                        gt_image = cv2.warpAffine(gt_image, M, (w, h))
+                        
+                        gt_image = np.array(gt_image)
+                        gt_image = torch.tensor(gt_image, dtype=torch.float32, device=self.cuda)
+                        # if roll is True, rotate the image by 80 degrees
+                    else:
+                        gt_image = cv2.imread(gt_images_path[j])
+                        gt_image = np.array(gt_image)
+                        gt_image = torch.tensor(gt_image, dtype=torch.float32, device=self.cuda)
+                    color = color.squeeze(0)
+                    color = torch.permute(color, (1,2,0))
+                    color = color*255
+                    # open the image in gt_images_path[i] with pillow
+                    # convert the image to tensor
+
+                    # compute the psnr and ssim
+                    psnr_loss += psnr(gt_image, color).item()
+                    ssim_loss += ssim(gt_image.unsqueeze(0), color.unsqueeze(0), data_range=255, size_average=False).item()
+                    gt_image = Image.open(gt_images_path[j]).convert('RGB')
+                    gt_image = self.to_tensor(gt_image)
+                    if gt_clip is None:
+                        gt_clip = get_clip_feature(gt_image.unsqueeze(0).to(self.cuda))
+                    else:
+                        gt_clip += get_clip_feature(gt_image.unsqueeze(0).to(self.cuda))
+                    
+                    
+
+            rendered_clip = rendered_clip/4
+
+            cosine = torch.cosine_similarity(torch.mean(target_clip, dim=0), torch.mean(rendered_clip, dim=0), dim=0)
+
+            clip_loss = 1.0 - cosine
+                
+            clip_loss_list.append(clip_loss.item())
+            """rendering = Image.fromarray(color.astype(np.uint8))
+            rendering.save(output_path + f"/out_diff_rendering_{i}.png")
+            print("RENDERING DONE")"""
+
+            clip_loss.backward()
+            optimizerC.step()
+
+            
+            psnr_loss_list.append(psnr_loss/4)
+            ssim_loss_list.append(ssim_loss/4)
+
+            cosine_gt = torch.cosine_similarity(torch.mean(target_clip, dim=0), torch.mean(gt_clip/4, dim=0), dim=0)
+            gt_loss = 1.0 - cosine_gt
+            cosine_diff = gt_loss - clip_loss
+            clip_comparison_list.append(cosine_diff.item())
+                
+
+                
+                
+
+            
+        
+            #print(f"### Iteration {iteration} - {directions[i]} camera - cosine distance: {clip_loss.item()}")
+            
+        # with the values inside loss_list, we can plot the loss curve and save it, using exponential moving average
+        # to smooth the curve
+        
+        to_be_returned_list = [clip_loss_list, psnr_loss_list, ssim_loss_list, clip_comparison_list]
+        names = ["clip_loss", "psnr_loss", "ssim_loss", "clip_comparison"]
+        for i, lst in enumerate(to_be_returned_list):
+            loss_list = lst.copy()
+            loss_list = np.array(loss_list)
+            loss_list = loss_list.reshape(-1,1)
+            loss_list = pd.DataFrame(loss_list)
+            loss_list = loss_list.ewm(span=20).mean()
+            loss_list = loss_list.to_numpy()
+            loss_list = loss_list.reshape(-1)
+            plt.plot(loss_list)
+            plt.savefig('/scratch/izar/fantini/results/tta_clip' + f"/{names[i]}.png")
+            plt.close()
+
+        print("FINETUNING DONE")
+        return to_be_returned_list
+
+
+    def clip_loss_tta(self, data, output_path, gt_images_path, roll):
+        psnr = PSNR()
+        def set_train():
+            self.netG.eval()
+            self.netC.train()
+
+        def set_eval():
+            self.netG.eval()
+            self.netC.eval()
+        clip_encoder, _ = clip.load(self.opt.clip_model_name, device = self.cuda)
+        self.clip_encoder = clip_encoder.eval().requires_grad_(False).cuda()
+        self.clip_normalizer = transforms.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))
+        self.clip_transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                self.clip_normalizer
+            ])
+
+        def get_clip_feature( x):
+            transf_x = self.clip_transform(x)
+            feat = self.clip_encoder.encode_image(transf_x)
+            return feat
+
+        
+        lr = 1e-3
+        optimizerC = torch.optim.Adam(self.netC.parameters(), lr=lr)
+        num_iters = 100
+        set_eval()
+        data['calib'] = data['calib'].to(self.cuda)
+        data['img'] = data['img'].to(self.cuda)
+        with torch.no_grad():
+            self.netG.filter(data['img'])
+            self.netC.filter(data['img'])
+            self.netC.attach(self.netG.get_im_feat())
+
+        look_at = torch.zeros( (4, 3), dtype=torch.float32, device=self.cuda)
+        camera_position = torch.tensor( [ [0, 0, 2],
+                                        [2, 0, 0],
+                                        [0, 0, -2],
+                                        [-2, 0, 0]  ]  , dtype=torch.float32, device=self.cuda)
+        camera_up_direction = torch.tensor( [[0, 1, 0]], dtype=torch.float32, device=self.cuda).repeat(4, 1,)
+
+        data['img']=  data['img']*0.5 + 0.5
+
+        points_on_surfaces = []
+        hits = []
+        print("\nRendering 4 views:")
+        for i in tqdm.tqdm(range(4)):   
+            with torch.no_grad():    
+                camera = Camera.from_args(eye=camera_position[i],
+                                            at=look_at[0],
+                                            up=camera_up_direction[0],
+                                            fov_distance=1,
+                                            width=512,
+                                            height=512,
+                                            dtype=torch.float32)
+
+                ray_grid = generate_centered_pixel_coords(camera.width, camera.height,
+                                                                camera.width, camera.height, device=self.cuda)
+
+                
+                #ray_orig, ray_dir = generate_pinhole_rays(camera.to(ray_grid[0].device), ray_grid)
+                ray_orig, ray_dir = generate_ortho_rays(camera.to(ray_grid[0].device), ray_grid)
+
+                
+                
+                
+                
+
+                points_on_surface, _ ,_ , hit, _ = sphere_tracing(self.netG,ray_orig,ray_dir,data['calib'],
+                                                            device=self.cuda )
+                
+                points_on_surface = points_on_surface[hit].unsqueeze(0)
+
+                points_on_surface = torch.transpose(points_on_surface, 1, 2)
+                points_on_surface = points_on_surface.to(self.cuda)
+
+
+                points_on_surfaces.append(points_on_surface)
+                hits.append(hit)
+                
+        print("\nFinetuning:")
+        target_clip = get_clip_feature(data['img'])
+        clip_loss_list = []
+        psnr_loss_list = []
+        ssim_loss_list = []
+        clip_comparison_list = []
+        for iteration in tqdm.tqdm(range(num_iters)):
+            
+            
             set_train()
             optimizerC.zero_grad()
-            i = iteration % 4    
+            i = iteration%4
 
             color = torch.zeros([262144,3], device = self.cuda)
             rgb , _ = self.netC.forward(data['img'], None, points_on_surfaces[i],  data['calib'], None, only_query = True )
@@ -664,59 +889,118 @@ class Evaluator:
             color = torch.permute(color, (2,0,1))
             color = color.unsqueeze(0)
 
-            target_clip = get_clip_feature(data['img'])
             rendered_clip = get_clip_feature(color)
+         
+            if output_path is not None:
+                directions = ["front", "right","back","left"]
+                rendered_image = np.zeros([262144,3])
+                rgb_copy = torch.tensor(rgb, requires_grad = False)
+                rgb_copy = rgb_copy.cpu().numpy()
+                rendered_image[hits[i].cpu().numpy()[0,:]] = rgb_copy.T
+                rendered_image = rendered_image*255
+                rendered_image = rendered_image.reshape(512,512,3)
+                rendering = Image.fromarray(rendered_image.astype(np.uint8))
+                index = "{:04d}".format(iteration)
+                rendering.save(output_path + f"/{index}_{directions[i]}_render.png")
+            
             cosine = torch.cosine_similarity(torch.mean(target_clip, dim=0), torch.mean(rendered_clip, dim=0), dim=0)
 
             clip_loss = 1.0 - cosine
-            
-            
+                
+            clip_loss_list.append(clip_loss.item())
             """rendering = Image.fromarray(color.astype(np.uint8))
             rendering.save(output_path + f"/out_diff_rendering_{i}.png")
             print("RENDERING DONE")"""
-           
+        
             clip_loss.backward()
             optimizerC.step()
-            directions = ["front", "right","back","left"]
-           
-            print(f"### Iteration {iteration} - {directions[i]} camera - cosine distance: {clip_loss.item()}")
 
-            rendered_image = np.zeros([262144,3])
-            rgb_copy = torch.tensor(rgb, requires_grad = False)
-            rgb_copy = rgb_copy.cpu().numpy()
-            rendered_image[hits[i].cpu().numpy()[0,:]] = rgb_copy.T
-            rendered_image = rendered_image*255
-            rendered_image = rendered_image.reshape(512,512,3)
-            rendering = Image.fromarray(rendered_image.astype(np.uint8))
-            index = "{:04d}".format(iteration)
-            rendering.save(output_path + f"/{index}_{directions[i]}_render.png")
-    
+            with torch.no_grad():
+                # load the image in gt_images_path[i] and compute the psnr and ssim
+                if roll:
+                    
+                    gt_image = cv2.imread(gt_images_path[i])
+                    # get the image size
+                    h, w = gt_image.shape[:2]
+                    # define the rotation matrix
+                    M = cv2.getRotationMatrix2D((w/2, h/2), 80, 1)
+                    
+                    # rotate the image
+                    gt_image = cv2.warpAffine(gt_image, M, (w, h))
+                    
+                    gt_image = np.array(gt_image)
+                    gt_image = torch.tensor(gt_image, dtype=torch.float32, device=self.cuda)
+                    # if roll is True, rotate the image by 80 degrees
+                else:
+                    gt_image = cv2.imread(gt_images_path[i])
+                    gt_image = np.array(gt_image)
+                    gt_image = torch.tensor(gt_image, dtype=torch.float32, device=self.cuda)
+                color = color.squeeze(0)
+                color = torch.permute(color, (1,2,0))
+                color = color*255
+                # open the image in gt_images_path[i] with pillow
+                # convert the image to tensor
 
-    def eval(self, data, use_octree=False, path=None):
-        '''
-        Evaluate a data point
-        :param data: a dict containing at least ['name'], ['image'], ['calib'], ['b_min'] and ['b_max'] tensors.
-        :return:
-        '''
+                # compute the psnr and ssim
+                psnr_loss_list.append(psnr(gt_image, color).item())
+                ssim_loss_list.append(ssim(gt_image.unsqueeze(0), color.unsqueeze(0), data_range=255, size_average=False).item())
+                gt_image = Image.open(gt_images_path[i]).convert('RGB')
+                gt_image = self.to_tensor(gt_image)
+                gt_clip = get_clip_feature(gt_image.unsqueeze(0).to(self.cuda))
+                
+                cosine_gt = torch.cosine_similarity(torch.mean(target_clip, dim=0), torch.mean(gt_clip, dim=0), dim=0)
+                gt_loss = 1.0 - cosine_gt
+                cosine_diff = gt_loss - clip_loss
+                clip_comparison_list.append( cosine_diff.item())
+
+                
+                
+
+            
         
-
-        self.render(data, output_path="/scratch/izar/fantini/renderings_clip")
+            #print(f"### Iteration {iteration} - {directions[i]} camera - cosine distance: {clip_loss.item()}")
+            
+        # with the values inside loss_list, we can plot the loss curve and save it, using exponential moving average
+        # to smooth the curve
         
+        to_be_returned_list = [clip_loss_list, psnr_loss_list, ssim_loss_list, clip_comparison_list]
+        names = ["clip_loss", "psnr_loss", "ssim_loss", "clip_comparison"]
+        for i, lst in enumerate(to_be_returned_list):
+            loss_list = lst.copy()
+            loss_list = np.array(loss_list)
+            loss_list = loss_list.reshape(-1,1)
+            loss_list = pd.DataFrame(loss_list)
+            loss_list = loss_list.ewm(span=20).mean()
+            loss_list = loss_list.to_numpy()
+            loss_list = loss_list.reshape(-1)
+            plt.plot(loss_list)
+            plt.savefig('/scratch/izar/fantini/results/tta_clip' + f"/{names[i]}.png")
+            plt.close()
+
+        print("FINETUNING DONE")
+        return to_be_returned_list
+
+
+
 
 
 
 if __name__ == '__main__':
     import warnings
     warnings.filterwarnings("ignore") 
+
+
+    DATA_PATH = '/scratch/izar/fantini/results/tta_clip'
+    AVERAGE = True
+
     evaluator = Evaluator(opt)
-    mesh_evaluator = MeshEvaluator()
-    mesh_evaluator.init_gl()
     
-    print("test folder path: ", opt.test_folder_path)
-    all_files = glob.glob(os.path.join(opt.test_folder_path, '*'))
-    eval_objs = ['0029', '0031', '0049', '0101', '0109'] # hard coded for now; testing on 5 objects
+    
+
+    all_input_images = glob.glob(os.path.join(DATA_PATH, "input" ,'*'))
+    
     #test_images = [f for f in all_files if ('png' in f or 'jpg' in f) and (not 'mask' in f) and any(obj in f for obj in eval_objs)]
-    test_images = [f for f in all_files if ('png' in f or 'jpg' in f) and (not 'mask' in f)]
+    test_images = [f for f in all_input_images if ('png' in f or 'jpg' in f)]
     rendered_images = []
     mask_images = []
 
@@ -734,35 +1018,51 @@ if __name__ == '__main__':
     folder_name = now.strftime("day_%Y_%m_%d_time_%H_%M_%S")
     print("date and time:",folder_name)
 
-    results_path = f"/scratch/izar/fantini/final/results"
+    results_path = os.path.join(DATA_PATH, "results", folder_name)
     #results_path = f"/scratch/izar/fantini/final/results/{folder_name}"
     # if folder doesn't exist, create it
     if not os.path.exists(results_path):
         os.makedirs(results_path)
         
-
+    # create a dictionary for corruption types and for model numbers
+    corruption_types = {}
     for image_path in tqdm.tqdm(test_images): # , test_masks)):
             
-        print(image_path) # , mask_path)
+        # given the image path, split it to get the name of the image
+        image_name = image_path.split("/")[-1]
+        model_number = image_name.split("_")[-2]
+        corruption_type = image_name.split("_")[0] + "_" + image_name.split("_")[1]
+        print("model number: ", model_number)
+        print("corruption type: ", corruption_type)
+        # get the paths to all the images in DATA_PATH/groundtruth/{model_number}
+        gt_images_paths = glob.glob(os.path.join(DATA_PATH, "groundtruth", model_number, '*'))
+        gt_images_paths.sort()
+        print("gt images paths: ", gt_images_paths)
+        # if the corruption type is not in the dictionary, add it
         data = evaluator.load_image(image_path) # , mask_path)
-        evaluator.eval(data, True, results_path)
-        # metrics calculation
-        reconstructed_obj_path = '%s/%s/result_%s.obj' % (results_path, opt.name, data['name'])
-        print(f"reconstructed_obj_path: {reconstructed_obj_path}")
-        # from all_files get the obj file with the same code as the image, getting it by splitting the path name by "_" and getting the -3 element
-        test_obj = [f for f in all_files if 'obj' in f and image_path.split("_")[-3] in f][0]
-        print(f"test_obj: {test_obj}")
-        mesh_evaluator.set_mesh(reconstructed_obj_path, test_obj)
-        vals = []
-        vals.append(0.1 * mesh_evaluator.get_chamfer_dist(500))
-        vals.append(0.1 * mesh_evaluator.get_surface_dist(500))
-        vals.append(4.0 * mesh_evaluator.get_reproj_normal_error(save_demo_img=os.path.join(results_path, data['name'] + '_try.png')))
-        print(f"vals: {vals}")
-        item = {
-                'name': '%s' % (image_path),
-                'vals': vals
-            }
-        total_vals.append(vals)
-        items.append(item)
-        np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
-        np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
+        renderings_dir = None
+        if corruption_type not in corruption_types:
+            corruption_types[corruption_type] = {}
+            renderings_dir = os.path.join(results_path, "renderings", corruption_type, model_number)
+            if not os.path.exists(renderings_dir):
+                os.makedirs(renderings_dir)
+             # if the model number is not in the dictionary, add it
+        if model_number not in corruption_types[corruption_type]:
+            corruption_types[corruption_type][model_number] = []
+        if corruption_type == "roll_80":
+            roll = True
+        else:
+            roll = False
+        
+        if AVERAGE:
+            corruption_types[corruption_type][model_number] = evaluator.clip_loss_tta_average(data, renderings_dir, gt_images_paths, roll)
+        else:
+            corruption_types[corruption_type][model_number] = evaluator.clip_loss_tta(data, renderings_dir, gt_images_paths, roll)
+        # save the current status of corruption_types in a pickle file
+        with open(os.path.join(results_path,"corruption_types.pickle"), "wb") as f:
+            pickle.dump(corruption_types, f)
+
+
+       
+       
+

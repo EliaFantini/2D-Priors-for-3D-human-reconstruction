@@ -283,7 +283,7 @@ def sphere_trace_sdf(nef, ray_o, ray_d, img, calib, num_steps = 1024, step_size 
     return x, t, d, hit
         
 
-def sphere_tracing(nef, ray_o, ray_d, calib, device, num_steps = 128, step_size = 0.05, min_dis=0.0003, camera_clamp = 3.0, calculate_normal = False):
+def sphere_tracing(nef, ray_o, ray_d, calib, device, num_steps = 64, step_size = 0.05, min_dis=0.0003, camera_clamp = 3.0, calculate_normal = False):
     # Distanace from ray origin
     t = torch.zeros(ray_o.shape[0], 1, device=ray_o.device)
     # Position in model space

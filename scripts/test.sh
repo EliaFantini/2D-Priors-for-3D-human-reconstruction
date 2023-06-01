@@ -2,7 +2,7 @@
 set -ex
 
 # Training
-GPU_ID=0
+GPU_ID=1
 DISPLAY_ID=$((GPU_ID*10+10))
 NAME='pifu_demo'
 
@@ -16,7 +16,7 @@ MLP_DIM_COLOR='513 1024 512 256 128 3'
 # NOTE: one can change here to reconstruct mesh in a different resolution.
 VOL_RES=256
 
-CHECKPOINTS_NETG_PATH='/home/fantini/PIFu/checkpoints/net_G'
+CHECKPOINTS_NETG_PATH='/scratch/izar/fantini/checkpoints/vanilla_baseline_netG_epoch_5'
 CHECKPOINTS_NETC_PATH='/home/fantini/PIFu/checkpoints/net_C'
 
 TEST_FOLDER_PATH='/scratch/izar/fantini/final'
@@ -35,4 +35,4 @@ CUDA_VISIBLE_DEVICES=${GPU_ID} python ./apps/eval.py \
     --norm_color 'group' \
     --test_folder_path ${TEST_FOLDER_PATH} \
     --load_netG_checkpoint_path ${CHECKPOINTS_NETG_PATH} \
-    --load_netC_checkpoint_path ${CHECKPOINTS_NETC_PATH}
+    #--load_netC_checkpoint_path ${CHECKPOINTS_NETC_PATH}

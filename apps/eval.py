@@ -666,15 +666,15 @@ class Evaluator:
             self.netG.eval()
             if self.netC:
                 self.netC.eval()
-            save_path = '%s/%s/result_%s.obj' % (path, opt.name, data['name'])
+            save_path = '%s/result_%s.obj' % (path, data['name'])
 
-            self.render(data, output_path="/home/fantini/CS-503-Chengkun-Fantini-Liu")
+            #self.render(data, output_path="/home/fantini/CS-503-Chengkun-Fantini-Liu")
             
 
-            """if self.netC:
+            if self.netC:
                 gen_mesh_color(opt, self.netG, self.netC, self.cuda, data, save_path, use_octree=use_octree)
             else:
-                gen_mesh(opt, self.netG, self.cuda, data, save_path, use_octree=use_octree)"""
+                gen_mesh(opt, self.netG, self.cuda, data, save_path, use_octree=use_octree)
 
 
 if __name__ == '__main__':
@@ -682,13 +682,18 @@ if __name__ == '__main__':
     warnings.filterwarnings("ignore") 
     evaluator = Evaluator(opt)
     mesh_evaluator = MeshEvaluator()
-    mesh_evaluator.init_gl()
+    #mesh_evaluator.init_gl()
+
+    DATA_PATH = '/scratch/izar/fantini/results/eval_baseline'
+
+    if not os.path.exists(DATA_PATH):
+        os.makedirs(DATA_PATH)
     
-    print("test folder path: ", opt.test_folder_path)
-    all_files = glob.glob(os.path.join(opt.test_folder_path, '*'))
-    eval_objs = ['0029', '0031', '0049', '0101', '0109'] # hard coded for now; testing on 5 objects
-    #test_images = [f for f in all_files if ('png' in f or 'jpg' in f) and (not 'mask' in f) and any(obj in f for obj in eval_objs)]
-    test_images = [f for f in all_files if ('png' in f or 'jpg' in f) and (not 'mask' in f)]
+    print("test folder path: ", DATA_PATH)
+    all_files = glob.glob(os.path.join(DATA_PATH, '*'))
+    eval_objs = ['0505', '0510', '0512', '0515', '0524'] # hard coded for now; testing on 5 objects
+    test_images = [f for f in all_files if ('png' in f or 'jpg' in f) and (not 'mask' in f) and any(obj in f for obj in eval_objs)]
+    #test_images = [f for f in all_files if ('png' in f or 'jpg' in f) and (not 'mask' in f)]
     rendered_images = []
     mask_images = []
 
@@ -706,8 +711,8 @@ if __name__ == '__main__':
     folder_name = now.strftime("day_%Y_%m_%d_time_%H_%M_%S")
     print("date and time:",folder_name)
 
-    results_path = f"/scratch/izar/fantini/final/results"
-    #results_path = f"/scratch/izar/fantini/final/results/{folder_name}"
+    #results_path = os.path.join(DATA_PATH, "results", folder_name)
+    results_path = f"/scratch/izar/fantini/results/eval_baseline/results/{folder_name}"
     # if folder doesn't exist, create it
     if not os.path.exists(results_path):
         os.makedirs(results_path)
@@ -719,7 +724,7 @@ if __name__ == '__main__':
         data = evaluator.load_image(image_path) # , mask_path)
         evaluator.eval(data, True, results_path)
         # metrics calculation
-        reconstructed_obj_path = '%s/%s/result_%s.obj' % (results_path, opt.name, data['name'])
+        reconstructed_obj_path = '%s/result_%s.obj' % (results_path, data['name'])
         print(f"reconstructed_obj_path: {reconstructed_obj_path}")
         # from all_files get the obj file with the same code as the image, getting it by splitting the path name by "_" and getting the -3 element
         test_obj = [f for f in all_files if 'obj' in f and image_path.split("_")[-3] in f][0]
@@ -728,7 +733,7 @@ if __name__ == '__main__':
         vals = []
         vals.append(0.1 * mesh_evaluator.get_chamfer_dist(500))
         vals.append(0.1 * mesh_evaluator.get_surface_dist(500))
-        vals.append(4.0 * mesh_evaluator.get_reproj_normal_error(save_demo_img=os.path.join(results_path, data['name'] + '_try.png')))
+        #vals.append(4.0 * mesh_evaluator.get_reproj_normal_error(save_demo_img=os.path.join(results_path, data['name'] + '_try.png')))
         print(f"vals: {vals}")
         item = {
                 'name': '%s' % (image_path),
@@ -738,26 +743,4 @@ if __name__ == '__main__':
         items.append(item)
         np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
         np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
-        
-    # for image_path in tqdm.tqdm(test_images): # , test_masks)):
-            
-    #     print(image_path) # , mask_path)
-    #     #data = evaluator.load_image(image_path) # , mask_path)
-    #     # metrics calculation
-    #     reconstructed_obj_path = '%s/%s/result_%s.obj' % (results_path, opt.name,  os.path.splitext(os.path.basename(image_path))[0])
-    #     # from all_files get the obj file with the same code as the image, getting it by splitting the path name by "_" and getting the -3 element
-    #     test_obj = [f for f in all_files if 'obj' in f and image_path.split("_")[-3] in f][0]
-    #     print(reconstructed_obj_path)
-    #     print(test_obj)
-    #     mesh_evaluator.set_mesh(reconstructed_obj_path, test_obj)
-    #     vals = []
-    #     vals.append( mesh_evaluator.get_chamfer_dist(500))
-    #     vals.append( mesh_evaluator.get_surface_dist(500))
-    #     item = {
-    #             'name': '%s' % (image_path),
-    #             'vals': vals
-    #         }
-    #     total_vals.append(vals)
-    #     items.append(item)
-    #     np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
-    #     np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
+    
