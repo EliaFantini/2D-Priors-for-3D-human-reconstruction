@@ -56,9 +56,9 @@ pip uninstall numpy
 pip install numpy==1.22.4
 ```
 
-### Usage 
+### Usage
 
-To train and Evaluate the models using the code, use the following prompts: 
+To train and evaluate the models using the code, use the following prompts: 
 
 ```
 ############## TTA on Vanilla PIFu ##############
