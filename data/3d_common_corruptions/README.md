@@ -18,9 +18,13 @@ Citation of the paper:
 
 - [3D Common Corruptions and Data Augmentation](#3d-common-corruptions-and-data-augmentation)
   - [Table of Contents](#table-of-contents)
+  - [Generate the corrupted images](#generate-the-corrupted-images)
   - [An overview of the corruptions](#an-overview-of-the-corruptions)
   - [Details on generating individual corruptions](#details-on-generating-individual-corruptions)
 
+## Generate the corrupted images 
+
+`python -m 3d_common_corruptions.create_3dcc.corrupt.py --RENDER_PATH <path/to/the/rendered/images> --MASK_PATH <path/to/the/masks>`
 
 ## An overview of the corruptions
 

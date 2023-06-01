@@ -4,14 +4,22 @@ import sys
 from zoom_blur_2d import zoom_blur_2d
 from scale_pitch_roll_jitter import apply_roll
 from create_non3d import create_non3d_data_iso_noise, create_non3d_data_low_light
+import argparse
 
-# Code Path 
-CORRUPTON_CODE_FOLDER_PATH = "/home/ziwliu/3DCommonCorruptions/create_3dcc"
-ICON_REPO_FOLDER_PATH = "/home/ziwliu/ICON-master"
+# Create an argument parser
+parser = argparse.ArgumentParser(description="Train shape model")
 
-# Data path 
-RENDER_PATH = "/scratch/izar/ziwliu/complete_jiff_corrupted/RENDER"
-MASK_PATH = "/scratch/izar/ziwliu/complete_jiff_corrupted/MASK"
+# Add arguments
+parser.add_argument("--RENDER_PATH", type=str, help="the path to the rendered images") 
+parser.add_argument("--MASK_PATH", type=str, help="the path to the corresponding masks") 
+
+# Parse the command line arguments
+args = parser.parse_args()
+
+# Access the parsed arguments
+dataroot = args.dataroot
+RENDER_PATH = args.RENDER_PATH
+MASK_PATH = args.MASK_PATH
 
 # Parameters 
 NUM_OF_EACH_TYPE = 72
