@@ -39,16 +39,16 @@ for angle in range(0, 360, 10):
         similarity = cosine_similarity(image_features1, image_features2)
 
     # Plot images side by side and set title with similarity
-    # fig, ax = plt.subplots(1, 2)
-    # ax[0].imshow(Image.open(image_path1))
-    # ax[1].imshow(Image.open(image_path2))
-    # ax[0].axis('off')
-    # ax[1].axis('off')
-    # ax[0].set_title(f'Similarity: {similarity.item():.4f}')
+    fig, ax = plt.subplots(1, 2)
+    ax[0].imshow(Image.open(image_path1))
+    ax[1].imshow(Image.open(image_path2))
+    ax[0].axis('off')
+    ax[1].axis('off')
+    ax[0].set_title(f'Similarity: {similarity.item():.4f}')
 
-    # # Save the plot
-    # output_path = os.path.join(output_folder, f'plot_{angle}.png')
-    # plt.savefig(output_path)
-    # plt.close()
+    # Save the plot
+    output_path = os.path.join(output_folder, f'plot_{angle}.png')
+    plt.savefig(output_path)
+    plt.close()
 
-    # print(f"Saved plot: {output_path}")
+    print(f"Saved plot: {output_path}")

@@ -200,16 +200,9 @@ class Evaluator:
         print('Using Network: ', netG.name)
 
         if opt.load_netG_checkpoint_path:
-            if opt.use_clip_encoder:
-                checkpoint = torch.load(opt.load_netG_checkpoint_path)
-                state_dict = checkpoint['state_dict']
-
-                for name, param in netG.named_parameters():
-                    if 'surface_classifier' in name or ('surface_classifier' in name):
-                        param.data.copy_(state_dict[name])
-            else:
-                netG.load_state_dict(torch.load(opt.load_netG_checkpoint_path, map_location=cuda))
-                print('net G loaded ...', opt.load_netC_checkpoint_path)
+            
+            netG.load_state_dict(torch.load(opt.load_netG_checkpoint_path, map_location=cuda))
+            print('net G loaded ...', opt.load_netC_checkpoint_path)
 
         if opt.load_netC_checkpoint_path is not None:
             print('loading for net C ...', opt.load_netC_checkpoint_path)
@@ -229,6 +222,7 @@ class Evaluator:
         self.netG = netG
         self.netC = netC
 
+        # def constants(self):# This script is borrowed and extended from https://github.com/nkolot/SPIN/blob/master/constants.py
         self.FOCAL_LENGTH = 5000.
         self.IMG_RES = 224
 
@@ -533,7 +527,7 @@ class Evaluator:
         return trans
 
     
-    def load_image(self, image_path): # , mask_path):
+    def load_image(self, image_path, masking_option, mask_path): # , mask_path):
         # Name
         img_name = os.path.splitext(os.path.basename(image_path))[0]
         # Calib
@@ -542,23 +536,34 @@ class Evaluator:
         projection_matrix = np.identity(4)
         projection_matrix[1, 1] = -1
         calib = torch.Tensor(projection_matrix).float()
+        # Mask
+        # mask = Image.open(mask_path).convert('L')
+        # mask = transforms.Resize(self.load_size)(mask)
+        # mask = transforms.ToTensor()(mask).float()
         # image
         image = Image.open(image_path).convert('RGB')
         
-        mask = remove(image, alpha_matting=True, session=new_session("u2netP"))
+        if masking_option == "mask":
+            mask = Image.open(mask_path).convert('L')
+            mask = transforms.Resize(self.load_size)(mask)
+            mask = transforms.ToTensor()(mask).float()
+        else:
+            mask = remove(image, alpha_matting=True, session=new_session(masking_option))
 
+                
+            # from mask only get the alpha channel
+            mask = mask.split()[-1]
             
-        # from mask only get the alpha channel
-        mask = mask.split()[-1]
-        
+            # mask.save("/home/fantini/PIFu/out.png")
+            
+            
+            
+            mask = transforms.Resize(self.load_size)(mask)
+            
+            mask = transforms.ToTensor()(mask).float()
+            print(mask.shape)
         image = self.to_tensor(image)
-        
-        
-        mask = transforms.Resize(self.load_size)(mask)
-        
-        mask = transforms.ToTensor()(mask).float()
-        print(mask.shape)
-
+        #mask = self.create_mask(image_path)
         image = mask.expand_as(image) * image
         return {
             'name': img_name,
@@ -569,6 +574,7 @@ class Evaluator:
             'b_max': B_MAX,
         }
     
+
     
 
     def eval(self, data, use_octree=False, path=None):
@@ -583,8 +589,8 @@ class Evaluator:
             if self.netC:
                 self.netC.eval()
             save_path = '%s/result_%s.obj' % (path, data['name'])
-            
 
+            
             if self.netC:
                 gen_mesh_color(opt, self.netG, self.netC, self.cuda, data, save_path, use_octree=use_octree)
             else:
@@ -598,17 +604,19 @@ if __name__ == '__main__':
     mesh_evaluator = MeshEvaluator()
     #mesh_evaluator.init_gl()
 
-    DATA_PATH = '/scratch/izar/fantini/results/eval_baseline'
-    NAME_EXPERIMENT = 'tta_baseline_5_sample_netG_epoch_4'
+    DATA_PATH = '/scratch/izar/fantini/results/eval_masking'
+    KEY_TO_THE_SAVE_PATH = 'eval_masking_baseline'
 
     if not os.path.exists(DATA_PATH):
         os.makedirs(DATA_PATH)
     
     print("test folder path: ", DATA_PATH)
     all_files = glob.glob(os.path.join(DATA_PATH, '*'))
-    eval_objs = ['0505', '0510', '0512', '0515', '0524'] # hard coded for now; testing on 5 objects
-    test_images = [f for f in all_files if ('png' in f or 'jpg' in f) and (not 'mask' in f) and any(obj in f for obj in eval_objs)]
-    #test_images = [f for f in all_files if ('png' in f or 'jpg' in f) and (not 'mask' in f)]
+    eval_objs = ['0000', '0008', '0013'] # hard coded for now; testing on 5 objects
+    #test_images = [f for f in all_files if ('png' in f or 'jpg' in f) and (not 'mask' in f) and any(obj in f for obj in eval_objs)]
+    test_images = [f for f in all_files if ('png' in f or 'jpg' in f) ]
+    test_images.sort()
+
     rendered_images = []
     mask_images = []
 
@@ -625,37 +633,42 @@ if __name__ == '__main__':
 
     folder_name = now.strftime("day_%Y_%m_%d_time_%H_%M_%S")
     print("date and time:",folder_name)
+    
 
     #results_path = os.path.join(DATA_PATH, "results", folder_name)
-    results_path = f"/scratch/izar/fantini/results/eval_baseline/results/{folder_name}_{NAME_EXPERIMENT}"
-    # if folder doesn't exist, create it
-    if not os.path.exists(results_path):
-        os.makedirs(results_path)
-        
+    masking_options = ["mask"," u2net","u2netp", "u2net_human_seg", "silueta" ,"isnet-general-use" ]
 
-    for image_path in tqdm.tqdm(test_images): # , test_masks)):
+    for masking_option in masking_options:
+        results_path = f"/scratch/izar/fantini/results/eval_baseline/results/{folder_name}_{masking_option}"
+        # if folder doesn't exist, create it
+        if not os.path.exists(results_path):
+            os.makedirs(results_path)
             
-        print(image_path) # , mask_path)
-        data = evaluator.load_image(image_path) # , mask_path)
-        evaluator.eval(data, True, results_path)
-        # metrics calculation
-        reconstructed_obj_path = '%s/result_%s.obj' % (results_path, data['name'])
-        print(f"reconstructed_obj_path: {reconstructed_obj_path}")
-        # from all_files get the obj file with the same code as the image, getting it by splitting the path name by "_" and getting the -3 element
-        test_obj = [f for f in all_files if 'obj' in f and image_path.split("_")[-3] in f][0]
-        print(f"test_obj: {test_obj}")
-        mesh_evaluator.set_mesh(reconstructed_obj_path, test_obj)
-        vals = []
-        vals.append(0.1 * mesh_evaluator.get_chamfer_dist(500))
-        vals.append(0.1 * mesh_evaluator.get_surface_dist(500))
-        #vals.append(4.0 * mesh_evaluator.get_reproj_normal_error(save_demo_img=os.path.join(results_path, data['name'] + '_try.png')))
-        print(f"vals: {vals}")
-        item = {
-                'name': '%s' % (image_path),
-                'vals': vals
-            }
-        total_vals.append(vals)
-        items.append(item)
-        np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
-        np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
+
+        for image_path in tqdm.tqdm(test_images): # , test_masks)):
+            print(image_path.split("/")[-1]) # , mask_path)
+            mask_path = os.path.join(DATA_PATH, "masks", image_path.split("/")[-1])
+            # replace jpg with png
+            mask_path = mask_path.replace("jpg", "png")
+            data = evaluator.load_image(image_path, masking_option,mask_path )# , mask_path)
+            evaluator.eval(data, True, results_path)
+            # metrics calculation
+            reconstructed_obj_path = '%s/result_%s.obj' % (results_path, data['name'])
+            print(f"reconstructed_obj_path: {reconstructed_obj_path}")
+            # from all_files get the obj file with the same code as the image, getting it by splitting the path name by "_" and getting the -3 element
+            test_obj = [f for f in all_files if 'obj' in f and image_path.split("/")[-1].split("_")[0] in f][0]
+            print(f"test_obj: {test_obj}")
+            mesh_evaluator.set_mesh(reconstructed_obj_path, test_obj)
+            vals = []
+            vals.append(0.1 * mesh_evaluator.get_chamfer_dist(500))
+            vals.append(0.1 * mesh_evaluator.get_surface_dist(500))
+            print(f"vals: {vals}")
+            item = {
+                    'name': '%s' % (image_path),
+                    'vals': vals
+                }
+            total_vals.append(vals)
+            items.append(item)
+            np.save(os.path.join(results_path, 'rp-item.npy'), np.array(items))
+            np.save(os.path.join(results_path, 'rp-vals.npy'), total_vals)
     

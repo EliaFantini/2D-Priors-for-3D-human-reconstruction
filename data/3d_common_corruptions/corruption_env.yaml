@@ -1,4 +1,4 @@
-name: testenv
+name: corruption_env
 channels:
   - pytorch
   - conda-forge
@@ -142,4 +142,4 @@ dependencies:
       - zipp==3.6.0
       - zope-event==4.6
       - zope-interface==5.5.2
-prefix: /root/miniconda3/envs/testenv
+prefix: /root/miniconda3/envs/corruption_env
