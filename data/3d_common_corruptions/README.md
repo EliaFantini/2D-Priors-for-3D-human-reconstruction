@@ -19,6 +19,7 @@ Citation of the paper:
 - [3D Common Corruptions and Data Augmentation](#3d-common-corruptions-and-data-augmentation)
   - [Table of Contents](#table-of-contents)
   - [Generate the corrupted images](#generate-the-corrupted-images)
+  - [Generate the corrupted images with corrupted masks](#generate-the-corrupted-image-with-corrupted-masks)
   - [An overview of the corruptions](#an-overview-of-the-corruptions)
   - [Details on generating individual corruptions](#details-on-generating-individual-corruptions)
 
@@ -26,6 +27,7 @@ Citation of the paper:
 This code generates all corruptions mentioned in our report. Inside the code the variable CLEAR_DATASET_PATH has to be changed to the root folder of the training dataset
 
 `python -m 3d_common_corruptions.create_3dcc.corrupt_v0.py
+
 ## Generate the corrupted images with corrupted masks
 
 This code generates corruptions that mostly degradate final performance as mentioned in our report, and it also creates corrupted masks. 
