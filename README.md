@@ -34,8 +34,8 @@ enhance the robustness of 3D generative models. In other words, we enhance 3D ge
 - [x] Testing PIFu on augmented data 
 - [x] Test-time adaptation of PIFu on the augmented data 
 - [x] Post-training refinement with CLIP semantic loss
-- [x] Naive feature fusion with 
-- [x] Multimodal learning with Domain Experts fusion (CLIP, DPT
+- [x] Naive CLIP feature fusion with `transform_concat` and `elementwise_additiion`
+- [x] Multimodal learning with Domain Experts (we now support CLIP, DPT) fusion
 ### 1. Environment Configuration 
 
 To setup the python environment used in this project, please follow the folloing steps:
@@ -77,11 +77,14 @@ In this project, we rendered Thuman2.0 to the same format as RenderPeople (used 
 ```bash
 gdown https://drive.google.com/u/2/uc?id=1py5ru62Rn6wpOX2LsmAthFs_PnQMeDfK
 ```
-After downloading it, please extract to a location, in the following part of this README, we will refer to this location as <dataroot>, an example of <dataroot> can be `/scratch/izar/ckli/rendered_jiff_complete/`.
+After downloading it, please extract to a location, in the following part of this README, we will refer to this location as `<dataroot>`, an example of <dataroot> can be `/scratch/izar/ckli/rendered_jiff_complete/`.
 
 ### Training Commands
 
 #### Training Vanilla PIFu with THuman2.0
+
+> Notice: we use `wandb` for logging, if you don't use wandb, please comment the code related to wandb in `train_shape.py`.
+
 ```bash
 python -m apps.train_shape --dataroot <dataroot>  --checkpoints_path ./baseline --batch_size 16  --num_epoch 5 --name vanilla-baseline
 ```
