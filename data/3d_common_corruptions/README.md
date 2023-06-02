@@ -23,6 +23,12 @@ Citation of the paper:
   - [Details on generating individual corruptions](#details-on-generating-individual-corruptions)
 
 ## Generate the corrupted images 
+This code generates all corruptions mentioned in our report. Inside the code the variable CLEAR_DATASET_PATH has to be changed to the root folder of the training dataset
+
+`python -m 3d_common_corruptions.create_3dcc.corrupt_v0.py
+## Generate the corrupted images with corrupted masks
+
+This code generates corruptions that mostly degradate final performance as mentioned in our report, and it also creates corrupted masks. 
 
 `python -m 3d_common_corruptions.create_3dcc.corrupt.py --RENDER_PATH <path/to/the/rendered/images> --MASK_PATH <path/to/the/masks>`
 
