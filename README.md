@@ -8,20 +8,38 @@ which is assumed to be taken in daily settings. We tackle the problem of lack of
 enhance the robustness of 3D generative models. In other words, we enhance 3D generative performance by leveraging pretrained 2D priors, and investigate different integration techniques for best performance. 
 
 <p align="center" width="100%">
-    <img width="60%" src="img/3DRecontruction.gif">
+    <img width="60%" src="img/multimodel.png">
 </p>
 
 ## Contents
 - [Potential of 2D Priors for Improving Robustness of Ill-Posed 3D Reconstruction](#potential-of-2d-priors-for-improving-robustness-of-ill-posed-3d-reconstruction)
 - [Contents](#contents)
-  - [Build the environment](#build-the-environment)
-  - [Usage](#usage)
+  - [0. Work done](#0-work-done)
+  - [1. Environment Configuration](#1-environment-configuration)
+  - [Training and testing](#training-and-testing)
   - [Code](#code)
   - [Data Augmentation](#data-augmentation)
+- [Acknowledgements](#acknowledgements)
 
-### Build the environment 
+### 0. Work done 
+
+* Environment Configuration 
+- [x] For rendering `THuman2.0` data with [JIFF](https://github.com/yukangcao/JIFF) code 
+- [x] For training [PIFu](https://github.com/shunsukesaito/PIFu)
+- [x] For data augmentation through commom corruptions 
+* Data Preprocessing 
+- [x] `THuman2.0` data rendering 
+- [x] Data augmentation through commom corruptions 
+* Model Training and testing 
+- [x] Testing PIFu on augmented data 
+- [x] Test-time adaptation of PIFu on the augmented data 
+- [x] Post-training refinement with CLIP semantic loss 
+- [x] Multimodal post-training refinework with CLIP semantic loss and DPT depth loss 
+
+### 1. Environment Configuration 
+
+The environment for `original PIFu` training and testing, 
 ```
-############## For original PIFu ##############
 conda create -n orig_pifu python=3.8
 conda activate orig_pifu 
 
@@ -41,8 +59,11 @@ pip install numpy==1.22.4
 # in case of error "cannot marching cubes"
 # Open PIFu/lib/mesh_util.py and change line 45 to:
 # verts, faces, normals, values = measure.marching_cubes(sdf, 0.5)
+```
 
-############## For PIFuHD ##############
+The environment for `PIFuHD` training and testing, 
+
+```
 pip install pyembree
 # conda install -c conda-forge pyembree
 pip install PyOpenGL
@@ -56,50 +77,67 @@ pip uninstall numpy
 pip install numpy==1.22.4
 ```
 
-### Usage
+### Training and testing 
 
-To train and evaluate the models using the code, use the following prompts: 
+1. Test time adaptation on Vanilla PIFu
+
+Test time adaptation on vanilla PIFu using the corrupted data to enhance the model's robustness. 
+
+Finetuning for 5 epochs: 
+```
+python -m apps.train_tta --dataroot <path/to/the/dataset>  --checkpoints_path ./tta_baseline_5_sample --load_netG_checkpoint_path <path/to/PIFu/net_G> vanilla-baseline/netG_epoch_10  --batch_size 16 --tta_adapt_sample 5 --num_epoch 5
+```
+
+2. Training the model with only CLIP 
+
+Training the model with self-supervised refinement of the texture network using CLIP (semantic prior) loss. 
+
+Training for 5 epochs from fresh: 
+```
+python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1  --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True
+```
+
+3. Training the baseline geometric network
+
+Training the baseline geometric network using the augmented data. 
+
+Training for 10 epochs from fresh: 
+```
+python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16  --gpu_ids "0,1" --num_epoch 10
+```
+
+Continuing training for 30 epochs: 
+```
+CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16   --num_epoch 30 --pin_memory --continue_train --resume_epoch 9 --checkpoints_path ./baseline_G --name vanilla-baseline
+```
+
+4. Training the baseline geometric network with CLIP 
+
+Training the baseline geometric network with self-supervised refinement of the texture network using CLIP loss. 
+
+Training for 5 epochs from fresh: 
+```
+python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_clip_G --batch_size 16  --num_epoch 5 --name clip_baseline --feature_fusion add --learning_rate 0.001 --use_clip_encoder True
+```
+
+Continuing training for 5 epochs: 
+```
+python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_clip_G --batch_size 16  --num_epoch 5 --name clip_baseline --feature_fusion add --learning_rate 0.001 --continue_train --resume_epoch 4
+```
+
+5. Train the model with DPT and CLIP
+
+Training the model with multimodel learning with DPT (depth prior) and CLIP prior. 
+
+Training from fresh for 5 epochs: 
 
 ```
-############## TTA on Vanilla PIFu ##############
-
-# Train for 5 epochs 
-
-python -m apps.train_tta --dataroot <path/to/the/dataset>  --checkpoints_path ./tta_baseline_5_sample --load_netG_checkpoint_path <path/to/PIFu/net_G> vanilla-baseline/netG_epoch_10  --batch_size 16 --tta_adapt_sample 5 --num_epoch 5
-
-############## Train the model with DPT and CLIP ##############
-
-# With a MLP (multi-player perception) with size `258 -> 1024 -> 512 -> 256 -> 128 -> 1`. 
-
-# Train from fresh for 5 epochs 
 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --use_dpt True --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True
+```
 
-# Continue training 
+Continuing training: 
+```
 CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --use_dpt True --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True --continue_train --checkpoints_path <path/to/PIFu/primser> --resume_epoch 3
-
-############## Train the model with only CLIP ##############
-
-# Train for 5 epochs from fresh 
-python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1  --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True
-
-############## Train the baseline geometric network ##############
-
-# Train for 10 epochs from fresh 
-
-python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16  --gpu_ids "0,1" --num_epoch 10
-
-# Continune training 
-
-CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16   --num_epoch 30 --pin_memory --continue_train --resume_epoch 9 --checkpoints_path ./baseline_G --name vanilla-baseline
-
-############## Train the baseline geometric network with CLIP ##############
-
-# Train for 5 epochs from fresh 
-python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_clip_G --batch_size 16  --num_epoch 5 --name clip_baseline --feature_fusion add --learning_rate 0.001 --use_clip_encoder True
-
-# Continue training 
-
-python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_clip_G --batch_size 16  --num_epoch 5 --name clip_baseline --feature_fusion add --learning_rate 0.001 --continue_train --resume_epoch 4
 ```
 
 ### Code 
@@ -129,3 +167,7 @@ To corrupted the images, use the command line
 ```
 python -m data.3d_common_corruptions.create_3dcc.corrupt.py --RENDER_PATH <path/to/the/rendered/images> --MASK_PATH <path/to/the/masks>
 ```
+
+## Acknowledgements 
+
+Our implementation is based on [PIFu](https://github.com/shunsukesaito/PIFu), [JIFF](https://github.com/yukangcao/JIFF), [3D Common Corruptions](https://3dcommoncorruptions.epfl.ch/), [CLIP](https://github.com/openai/CLIP), and [Prismer](https://shikun.io/projects/prismer). 
