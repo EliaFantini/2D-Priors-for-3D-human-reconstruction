@@ -134,6 +134,20 @@ Continuing training:
 ```
 CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --use_dpt True --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True --continue_train --checkpoints_path <path/to/PIFu/primser> --resume_epoch 3
 ```
+#### Additional ablation experiments
+CLIP + image
+```
+python -m apps.train_shape --dataroot /scratch/izar/ckli/rendered_jiff_complete/ --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path /scratch/izar/ckli/PIFu/checkpoints/net_G --num_epoch 5 --name prismer_no_dpt --use_clip_encoder True
+```
+Continue CLIP+Image
+```
+python -m apps.train_shape --dataroot /scratch/izar/ckli/rendered_jiff_complete/ --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path /scratch/izar/ckli/PIFu/checkpoints/net_G --num_epoch 5 --name prismer_no_dpt --use_clip_encoder True --continue_train
+``` 
+Only CLIP
+```
+python -m apps.train_shape --dataroot /scratch/izar/ckli/rendered_jiff_complete/  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1  --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path /scratch/izar/ckli/PIFu/checkpoints/net_G --num_epoch 5 --name prismer_clip_only --use_clip_encoder True --prismer_only_clip True --resume_epoch 3
+```
+  
 #### Running Self-Supervised Refinement
 
 This experiment will use the downloaded `tta_clip` data mentioned in Dataset Preparation section. Copy the path to that folder in the variable DATA_PATH inside `apps/clip_loss_tta.py`. Results can be saved in the preferred location by changing the `results_path` variable in the same file, or by default a `results` folder will be created inside DATA_PATH. Set AVERAGE variable to True to calculate averaged Clip embedding instead of applying Clip Loss in a sequential manner.
