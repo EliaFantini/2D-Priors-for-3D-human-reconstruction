@@ -5,11 +5,14 @@ This repository contains code for the experiments of our project for EPFL CS 503
 In this project we focus on the problem of comprehensive
 human full-body mesh reconstruction from a single image,
 which is assumed to be taken in daily settings. We tackle the problem of lack of information and corruption by integrating different 2D priors into the workflow to
-enhance the robustness of 3D generative models. In other words, we enhance 3D generative performance by leveraging pretrained 2D priors, and investigate different integration techniques for best performance. 
+enhance the robustness of 3D generative models. In other words, we explore the possibility to enhance 3D generative performance by leveraging pretrained 2D priors, and investigate different integration techniques for best performance. 
 
-<p align="center" width="100%">
-    <img width="60%" src="img/multimodel.png">
-</p>
+
+![image](https://github.com/EliaFantini/CS-503-Chengkun-Fantini-Liu/assets/62103572/5a9e33e7-0315-403a-bfe8-77a010ffd372)
+
+
+![image](https://github.com/EliaFantini/CS-503-Chengkun-Fantini-Liu/assets/62103572/da6d5b63-3274-4054-bdf0-fe202846f394)
+
 
 ## Contents
 - [Potential of 2D Priors for Improving Robustness of Ill-Posed 3D Reconstruction](#potential-of-2d-priors-for-improving-robustness-of-ill-posed-3d-reconstruction)
@@ -52,25 +55,16 @@ pip install numpy cython
 pip install menpo
 pip install opencv-python
 
-# we require this version of numpy
-pip uninstall numpy
-pip install numpy==1.22.4
 
-# in case of error "cannot marching cubes"
-# Open PIFu/lib/mesh_util.py and change line 45 to:
-# verts, faces, normals, values = measure.marching_cubes(sdf, 0.5)
 
 pip install pyembree # or alternatively use conda install -c conda-forge pyembree
 pip install PyOpenGL
 
-# freeglut (use sudo apt-get install freeglut3-dev for non headless users)
+
 
 pip install ffmpeg
 
 pip install rembg[gpu]
-
-pip uninstall numpy
-pip install numpy==1.22.4
 ```
 ### Dataset Preparation
 In this project, we rendered Thuman2.0 to the same format as RenderPeople (used in the original PIFu paper/code). To download our pre-rendered dataset, please `pip install gdown` and use this command:
