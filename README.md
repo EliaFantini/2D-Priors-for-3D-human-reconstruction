@@ -7,11 +7,11 @@ human full-body mesh reconstruction from a single image,
 which is assumed to be taken in daily settings. We tackle the problem of lack of information and corruption by integrating different 2D priors into the workflow to
 enhance the robustness of 3D generative models. In other words, we explore the possibility to enhance 3D generative performance by leveraging pretrained 2D priors, and investigate different integration techniques for best performance. 
 
+<center>
+<img src="https://github.com/EliaFantini/CS-503-Chengkun-Fantini-Liu/assets/62103572/da6d5b63-3274-4054-bdf0-fe202846f394" alt="" width="80%" height="80%">
+</center>
 
-![image](https://github.com/EliaFantini/CS-503-Chengkun-Fantini-Liu/assets/62103572/5a9e33e7-0315-403a-bfe8-77a010ffd372)
 
-
-![image](https://github.com/EliaFantini/CS-503-Chengkun-Fantini-Liu/assets/62103572/da6d5b63-3274-4054-bdf0-fe202846f394)
 
 
 ## Contents
@@ -75,7 +75,7 @@ After downloading it, please extract to a location, in the following part of thi
   
 Some experiments will require some data to be arranged in a different way than training. For simplicity, we already provide them in the following link. Download it in the same way with command:
 ```bash
-gdown TODO
+gdown https://drive.google.com/u/2/uc?id=1BiHPE9ptX0X5WMkyaqRAAGSm5npSVdTX
 ```
 It will contain the folders `tta_clip`,`eval`, and `eval_masking`. The first one is required to run test on Self Supervised Finetuning, the second one to run evaluation on any kind kind of model we tested, the third one is required to ran the masking techniques comparison, as it contains corrupted masks.
 
@@ -90,55 +90,41 @@ python -m apps.train_shape --dataroot <dataroot>  --checkpoints_path ./baseline 
 ```
 
 #### Test Time Adaptation with Corruption data
-Test time adaptation on vanilla PIFu using the corrupted data to enhance the model's robustness. 
+ 
+Test time adaptation on vanilla PIFu aims to use the corrupted data to enhance the model's robustness. 
 
 Finetuning for 5 epochs with 5 samples: 
+  
 ```
 python -m apps.train_tta --dataroot <dataroot>  --checkpoints_path ./tta_baseline_5_sample --load_netG_checkpoint_path <path_to_vanilla_baseline_netG>  --batch_size 16 --tta_adapt_sample 5 --num_epoch 5
 ```
 
-2. Training the model with only CLIP 
 
-Training the model with self-supervised refinement of the texture network using CLIP (semantic prior) loss. 
-
-Training for 5 epochs from fresh: 
-```
-python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1  --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True
-```
-
-3. Training the baseline geometric network
+### Training the baseline geometric network
 
 Training the baseline geometric network using the augmented data. 
 
-Training for 10 epochs from fresh: 
+Training for 10 epochs: 
 ```
-python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16  --gpu_ids "0,1" --num_epoch 10
+python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16   --num_epoch 10 --phase dataaug
 ```
+whenever you want to continue from last checkpoint use `--continue_train` paired with `--resume_epoch` arguments.
 
-Continuing training for 30 epochs: 
-```
-CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_G --batch_size 16   --num_epoch 30 --pin_memory --continue_train --resume_epoch 9 --checkpoints_path ./baseline_G --name vanilla-baseline
-```
+### Naive CLIP multimodal learning
 
-4. Training the baseline geometric network with CLIP 
-
-Training the baseline geometric network with self-supervised refinement of the texture network using CLIP loss. 
-
-Training for 5 epochs from fresh: 
+Use `tf_concat` or `add` for feature_fusion option.
 ```
-python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_clip_G --batch_size 16  --num_epoch 5 --name clip_baseline --feature_fusion add --learning_rate 0.001 --use_clip_encoder True
+python -m apps.train_shape --dataroot <data_root> --checkpoints_path ./baseline_clip_G --batch_size 16 --num_epoch 5 --name clip_baseline_correct --feature_fusion add --learning_rate 0.001 --use_clip_encoder True
 ```
-
-Continuing training for 5 epochs: 
-```
-python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./baseline_clip_G --batch_size 16  --num_epoch 5 --name clip_baseline --feature_fusion add --learning_rate 0.001 --continue_train --resume_epoch 4
-```
-
-5. Train the model with DPT and CLIP
-
+  
+### Training the model with Experts Fusion module
 Training the model with multimodel learning with DPT (depth prior) and CLIP prior. 
+  
+<center>
+<img src="https://github.com/EliaFantini/CS-503-Chengkun-Fantini-Liu/assets/62103572/5a9e33e7-0315-403a-bfe8-77a010ffd372" alt="" width="50%" height="50%">
+</center>
 
-Training from fresh for 5 epochs: 
+Training for 5 epochs: 
 
 ```
 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --use_dpt True --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True
@@ -149,6 +135,7 @@ Continuing training:
 CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --use_dpt True --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True --continue_train --checkpoints_path <path/to/PIFu/primser> --resume_epoch 3
 ```
 #### Running Self-Supervised Refinement
+
 This experiment will use the downloaded `tta_clip` data mentioned in Dataset Preparation section. Copy the path to that folder in the variable DATA_PATH inside `apps/clip_loss_tta.py`. Results can be saved in the preferred location by changing the `results_path` variable in the same file, or by default a `results` folder will be created inside DATA_PATH. Set AVERAGE variable to True to calculate averaged Clip embedding instead of applying Clip Loss in a sequential manner.
   Then run the following command from project's root folder:
   
