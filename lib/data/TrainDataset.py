@@ -65,7 +65,7 @@ class TrainDataset(Dataset):
 
         Args:
             opt (_type_): argument parser
-            phase (str, optional): phases. Defaults to 'train', supports 'train' 'test' 'augment'.
+            phase (str, optional): phases. Defaults to 'train', supports 'train' 'test' 'augment' 'augment_test'.
         """
         self.opt = opt
         self.projection_mode = 'orthogonal'
@@ -112,7 +112,7 @@ class TrainDataset(Dataset):
             transforms.ColorJitter(brightness=opt.aug_bri, contrast=opt.aug_con, saturation=opt.aug_sat,
                                    hue=opt.aug_hue)
         ])
-        if self.phase == 'augment':
+        if self.phase in ['augment', 'augment_test']:
             self.obj_subjects = [s.split('_')[0] for s in self.subjects]
 
             self.mesh_dic = load_trimesh(self.OBJ, self.obj_subjects)
