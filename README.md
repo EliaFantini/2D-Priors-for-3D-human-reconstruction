@@ -72,6 +72,12 @@ In this project, we rendered Thuman2.0 to the same format as RenderPeople (used 
 gdown https://drive.google.com/u/2/uc?id=1py5ru62Rn6wpOX2LsmAthFs_PnQMeDfK
 ```
 After downloading it, please extract to a location, in the following part of this README, we will refer to this location as `<dataroot>`, an example of <dataroot> can be `/scratch/izar/ckli/rendered_jiff_complete/`.
+  
+Some experiments will require some data to be arranged in a different way than training. For simplicity, we already provide them in the following link. Download it in the same way with command:
+```bash
+gdown TODO
+```
+It will contain the folders `tta_clip`,`eval`, and `eval_masking`. The first one is required to run test on Self Supervised Finetuning, the second one to run evaluation on any kind kind of model we tested, the third one is required to ran the masking techniques comparison, as it contains corrupted masks.
 
 ### Training Commands
 
@@ -142,11 +148,36 @@ Continuing training:
 ```
 CUDA_VISIBLE_DEVICES=0 python -m apps.train_shape --dataroot <path/to/the/dataset>  --checkpoints_path ./primser --batch_size 16 --mlp_dim 258 1024 512 256 128 1 --use_dpt True --freeze_encoder True --feature_fusion prismer --load_netG_checkpoint_path <path/to/PIFu/net_G> --num_epoch 5 --name prismer --use_clip_encoder True --continue_train --checkpoints_path <path/to/PIFu/primser> --resume_epoch 3
 ```
+#### Running Self-Supervised Refinement
+This experiment will use the downloaded `tta_clip` data mentioned in Dataset Preparation section. Copy the path to that folder in the variable DATA_PATH inside `apps/clip_loss_tta.py`. Results can be saved in the preferred location by changing the `results_path` variable in the same file, or by default a `results` folder will be created inside DATA_PATH. Set AVERAGE variable to True to calculate averaged Clip embedding instead of applying Clip Loss in a sequential manner.
+  Then run the following command from project's root folder:
+  
+```
+sh scripts/test_clip.sh
+```
+#### Experiment on different masking production techniques and evaluation of their performance
+This experiment will use the downloaded `eval_masking` data mentioned in Dataset Preparation section. Copy the path to that folder in the variable DATA_PATH inside `apps/eval_masking.py`. Results can be saved in the preferred location by changing the `results_path` variable in the same file.
+  Then run the following command from project's root folder:
+  
+```
+sh scripts/test_masking.sh
+```
+  
+
+#### Running evaluation
+This experiment will use the downloaded `eval` data mentioned in Dataset Preparation section. Copy the path to that folder in the variable DATA_PATH inside `apps/clip_loss_tta.py`. Results can be saved in the preferred location by changing the `results_path` variable in the same file. To evaluate a specific model, load its checkpoint by replacing the path to it in the variable `CHECKPOINTS_NETG_PATH`  inside `scripts/test.sh`
+  Then run the following command from project's root folder:
+  
+```
+sh scripts/test.sh
+```
+  
 
 ### Code 
 This codebase provides code for: 
 
 **Models, data and rendering**
+  
 Our backbone is PIFu model. We included the vanilla PIFu model, PIFu variants, PIFu with CLIP loss, and other helper functions in the folder `lib/model`. The train and evaluation dataset fed into the network are processed by the code in `lib/data`. 
 
 During the training, we need to render images of the specified angles from the human mesh models, and the code for rendering are in the folder `lib/renderer`. 
@@ -158,7 +189,11 @@ Other files under the `lib` directory are also helper functions for the training
 We augment the dataset by corrupting part of the rendered images, and the code for creating the dataset is in the folder `data/3d_common_corruptions/create_3dcc/motions_video`. 
 
 **Training and evaluating**
+  
 The code for training and evaluating, and also the camera settings are in the folder `apps`. 
+  
+**Experiments**
+ The `experiments` folder contains some code we used to generate plots and tables on the .npy and pickles generated from our experiments, as well as some code to conduct some very specific experiments.
 
 ### Data Augmentation 
 
