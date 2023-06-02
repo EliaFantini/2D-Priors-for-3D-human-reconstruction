@@ -2,6 +2,7 @@
 
 This repository is the code that we use for data augmentation of corrupted data. We borrowed the code from the paper: [**3D Common Corruptions and Data Augmentation**](https://3dcommoncorruptions.epfl.ch/). 
 
+
 Citation of the paper: 
 
 ```
@@ -18,10 +19,15 @@ Citation of the paper:
 
 - [3D Common Corruptions and Data Augmentation](#3d-common-corruptions-and-data-augmentation)
   - [Table of Contents](#table-of-contents)
+  - [Installation ](#Installation)
   - [Generate the corrupted images](#generate-the-corrupted-images)
   - [Generate the corrupted images with corrupted masks](#generate-the-corrupted-image-with-corrupted-masks)
   - [An overview of the corruptions](#an-overview-of-the-corruptions)
   - [Details on generating individual corruptions](#details-on-generating-individual-corruptions)
+## Installation 
+To install the environment you can either follow the instruction from the original repository or create a new environment using the provided [yaml file](https://github.com/EliaFantini/CS-503-Chengkun-Fantini-Liu/blob/main/data/3d_common_corruptions/corruption_env.yaml).
+
+This folder includes only the code we modified, git clone the original repository and substitute their folder with ours (create_3dcc).
 
 ## Generate the corrupted images 
 This code generates all corruptions mentioned in our report. Inside the code the variable CLEAR_DATASET_PATH has to be changed to the root folder of the training dataset
