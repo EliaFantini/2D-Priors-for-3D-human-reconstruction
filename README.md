@@ -33,15 +33,15 @@ enhance the robustness of 3D generative models. In other words, we enhance 3D ge
 * Model Training and testing 
 - [x] Testing PIFu on augmented data 
 - [x] Test-time adaptation of PIFu on the augmented data 
-- [x] Post-training refinement with CLIP semantic loss 
-- [x] Multimodal post-training refinework with CLIP semantic loss and DPT depth loss 
-
+- [x] Post-training refinement with CLIP semantic loss
+- [x] Naive feature fusion with 
+- [x] Multimodal learning with Domain Experts fusion (CLIP, DPT
 ### 1. Environment Configuration 
 
-The environment for `original PIFu` training and testing, 
+To setup the python environment used in this project, please follow the folloing steps:
 ```
-conda create -n orig_pifu python=3.8
-conda activate orig_pifu 
+conda create -n 2d3d python=3.8
+conda activate 2d3d 
 
 conda install pytorch==1.13.0 torchvision==0.14.0 pytorch-cuda=11.6 -c pytorch -c nvidia
 conda install pillow
@@ -52,23 +52,19 @@ pip install numpy cython
 pip install menpo
 pip install opencv-python
 
-# in case of error with numpy
+# we require this version of numpy
 pip uninstall numpy
 pip install numpy==1.22.4
 
 # in case of error "cannot marching cubes"
 # Open PIFu/lib/mesh_util.py and change line 45 to:
 # verts, faces, normals, values = measure.marching_cubes(sdf, 0.5)
-```
 
-The environment for `PIFuHD` training and testing, 
-
-```
-pip install pyembree
-# conda install -c conda-forge pyembree
+pip install pyembree # or alternatively use conda install -c conda-forge pyembree
 pip install PyOpenGL
-# freeglut (use sudo apt-get install freeglut3-dev for ubuntu users)
-# this one we can't do it
+
+# freeglut (use sudo apt-get install freeglut3-dev for non headless users)
+
 pip install ffmpeg
 
 pip install rembg[gpu]
@@ -76,16 +72,26 @@ pip install rembg[gpu]
 pip uninstall numpy
 pip install numpy==1.22.4
 ```
+### Dataset Preparation
+In this project, we rendered Thuman2.0 to the same format as RenderPeople (used in the original PIFu paper/code). To download our pre-rendered dataset, please `pip install gdown` and use this command:
+```bash
+gdown https://drive.google.com/u/2/uc?id=1py5ru62Rn6wpOX2LsmAthFs_PnQMeDfK
+```
+After downloading it, please extract to a location, in the following part of this README, we will refer to this location as <dataroot>, an example of <dataroot> can be `/scratch/izar/ckli/rendered_jiff_complete/`.
 
-### Training and testing 
+### Training Commands
 
-1. Test time adaptation on Vanilla PIFu
+#### Training Vanilla PIFu with THuman2.0
+```bash
+python -m apps.train_shape --dataroot <dataroot>  --checkpoints_path ./baseline --batch_size 16  --num_epoch 5 --name vanilla-baseline
+```
 
+#### Test Time Adaptation with Corruption data
 Test time adaptation on vanilla PIFu using the corrupted data to enhance the model's robustness. 
 
-Finetuning for 5 epochs: 
+Finetuning for 5 epochs with 5 samples: 
 ```
-python -m apps.train_tta --dataroot <path/to/the/dataset>  --checkpoints_path ./tta_baseline_5_sample --load_netG_checkpoint_path <path/to/PIFu/net_G> vanilla-baseline/netG_epoch_10  --batch_size 16 --tta_adapt_sample 5 --num_epoch 5
+python -m apps.train_tta --dataroot <dataroot>  --checkpoints_path ./tta_baseline_5_sample --load_netG_checkpoint_path <path_to_vanilla_baseline_netG>  --batch_size 16 --tta_adapt_sample 5 --num_epoch 5
 ```
 
 2. Training the model with only CLIP 
