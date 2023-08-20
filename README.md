@@ -1,3 +1,15 @@
+<p align="center">
+  <img alt="🧍2D_Priors_for_3D_Human_Reconstruction " src="https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/cbf0036b-bfc1-4fa8-a8fa-dd10c808f1a9">
+  <img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/y/EliaFantini/2D-Priors-for-3D-human-reconstruction">
+  <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/EliaFantini/2D-Priors-for-3D-human-reconstruction">
+  <img alt="GitHub code size" src="https://img.shields.io/github/languages/code-size/EliaFantini/2D-Priors-for-3D-human-reconstruction">
+  <img alt="GitHub repo size" src="https://img.shields.io/github/repo-size/EliaFantini/2D-Priors-for-3D-human-reconstruction">
+  <img alt="GitHub follow" src="https://img.shields.io/github/followers/EliaFantini?label=Follow">
+  <img alt="GitHub fork" src="https://img.shields.io/github/forks/EliaFantini/2D-Priors-for-3D-human-reconstruction?label=Fork">
+  <img alt="GitHub watchers" src="https://img.shields.io/github/watchers/EliaFantini/2D-Priors-for-3D-human-reconstruction?abel=Watch">
+  <img alt="GitHub star" src="https://img.shields.io/github/stars/EliaFantini/2D-Priors-for-3D-human-reconstruction?style=social">
+</p>
+
 ## Potential of 2D Priors for Improving Robustness of Ill-Posed 3D Reconstruction
 
 This repository contains code for the experiments of our project for EPFL CS 503 Visual Intelligence. 
@@ -8,10 +20,25 @@ which is assumed to be taken in daily settings. We tackle the problem of lack of
 enhance the robustness of 3D generative models. In other words, we explore the possibility to enhance 3D generative performance by leveraging pretrained 2D priors, and investigate different integration techniques for best performance. 
 
 <center>
-<img src="https://github.com/EliaFantini/CS-503-Chengkun-Fantini-Liu/assets/62103572/da6d5b63-3274-4054-bdf0-fe202846f394" alt="" width="80%" height="80%">
+<img width="469" alt="image" src="https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/8d1dc763-4e94-49fd-a215-655b519edcb3">
 </center>
 
 
+<center>
+<img width="513" alt="image" src="https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/2924c8ae-f3e5-4c41-ae7a-f874812a2231">
+</center>
+
+## Quick presentation
+![ezgif com-gif-maker](https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/445d6996-0e77-447d-a7dc-9c4e2ccedced)
+
+For more detailed info please read the [report](https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/edit/main/report.pdf).
+
+
+## Authors 
+
+-  [Fantini Elia](https://github.com/EliaFantini)
+-  [Chengkun Li](https://github.com/CharlieLeee)
+-  Ziwei Liu
 
 
 ## Contents
