@@ -10,14 +10,14 @@
   <img alt="GitHub star" src="https://img.shields.io/github/stars/EliaFantini/2D-Priors-for-3D-human-reconstruction?style=social">
 </p>
 
-## Potential of 2D Priors for Improving Robustness of Ill-Posed 3D Reconstruction
-
-This repository contains code for the experiments of our project for EPFL CS 503 Visual Intelligence. 
+This repository contains code for the experiments of our project "Potential of 2D Priors for Improving Robustness of Ill-Posed 3D Reconstruction" for EPFL CS 503 Visual Intelligence. 
 
 In this project we focus on the problem of comprehensive
 human full-body mesh reconstruction from a single image,
 which is assumed to be taken in daily settings. We tackle the problem of lack of information and corruption by integrating different 2D priors into the workflow to
-enhance the robustness of 3D generative models. In other words, we explore the possibility to enhance 3D generative performance by leveraging pretrained 2D priors, and investigate different integration techniques for best performance. 
+enhance the robustness of 3D generative models. 
+
+In other words, we explore the possibility to enhance 3D generative performance by leveraging pretrained 2D priors, and investigate different integration techniques for best performance. 
 
 <center>
 <img width="469" alt="image" src="https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/8d1dc763-4e94-49fd-a215-655b519edcb3">
@@ -29,9 +29,10 @@ enhance the robustness of 3D generative models. In other words, we explore the p
 </center>
 
 ## Quick presentation
+
 ![ezgif com-gif-maker](https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/445d6996-0e77-447d-a7dc-9c4e2ccedced)
 
-For more detailed info please read the [report](https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/edit/main/report.pdf).
+For more detailed info please read the [report](https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/blob/main/report.pdf).
 
 
 ## Authors 
@@ -51,6 +52,8 @@ For more detailed info please read the [report](https://github.com/EliaFantini/2
   - [Data Augmentation](#data-augmentation)
 - [Acknowledgements](#acknowledgements)
 
+## 
+
 ### 0. Work done 
 
 * Environment Configuration 
@@ -68,7 +71,7 @@ For more detailed info please read the [report](https://github.com/EliaFantini/2
 - [x] Multimodal learning with Domain Experts (we now support CLIP, DPT) fusion
 ### 1. Environment Configuration 
 
-To setup the python environment used in this project, please follow the folloing steps:
+To setup the python environment used in this project, please follow the following steps:
 ```
 conda create -n 2d3d python=3.8
 conda activate 2d3d 
@@ -146,10 +149,6 @@ python -m apps.train_shape --dataroot <data_root> --checkpoints_path ./baseline_
   
 ### Training the model with Experts Fusion module
 Training the model with multimodel learning with DPT (depth prior) and CLIP prior. 
-  
-<center>
-<img src="https://github.com/EliaFantini/CS-503-Chengkun-Fantini-Liu/assets/62103572/5a9e33e7-0315-403a-bfe8-77a010ffd372" alt="" width="50%" height="50%">
-</center>
 
 Training for 5 epochs: 
 
@@ -204,7 +203,7 @@ sh scripts/test.sh
 ### Code 
 This codebase provides code for: 
 
-**Models, data and rendering**
+- **Models, data and rendering**
   
 Our backbone is PIFu model. We included the vanilla PIFu model, PIFu variants, PIFu with CLIP loss, and other helper functions in the folder `lib/model`. The train and evaluation dataset fed into the network are processed by the code in `lib/data`. 
 
@@ -212,20 +211,21 @@ During the training, we need to render images of the specified angles from the h
 
 Other files under the `lib` directory are also helper functions for the training. 
 
-**Data augmentation via corruption**
+- **Data augmentation via corruption**
 
 We augment the dataset by corrupting part of the rendered images, and the code for creating the dataset is in the folder `data/3d_common_corruptions/create_3dcc/motions_video`. 
 
-**Training and evaluating**
+- **Training and evaluating**
   
 The code for training and evaluating, and also the camera settings are in the folder `apps`. 
   
-**Experiments**
+- **Experiments**
+  
  The `experiments` folder contains some code we used to generate plots and tables on the .npy and pickles generated from our experiments, as well as some code to conduct some very specific experiments.
 
 ### Data Augmentation 
 
-In this project, we augment the dataset with corrupted images. We borrowed part of the code from the paper: [**3D Common Corruptions and Data Augmentation**](https://3dcommoncorruptions.epfl.ch/). 
+In this part of the project, we augment the dataset with corrupted images. We borrowed part of the code from the paper: [**3D Common Corruptions and Data Augmentation**](https://3dcommoncorruptions.epfl.ch/). 
 
 We utilize 4 different kinds of corruptions, including low_light, iso_noise, camera_roll, and zoom_blur. Specifically, for each model, we have 360 rendered images from 360 different angles. For each model's rendered images, we pick `1/5` of data for each kind of corruption and leave the rest `1/5` as they are. 
 
@@ -237,3 +237,15 @@ python -m data.3d_common_corruptions.create_3dcc.corrupt.py --RENDER_PATH <path/
 ## Acknowledgements 
 
 Our implementation is based on [PIFu](https://github.com/shunsukesaito/PIFu), [JIFF](https://github.com/yukangcao/JIFF), [3D Common Corruptions](https://3dcommoncorruptions.epfl.ch/), [CLIP](https://github.com/openai/CLIP), and [Prismer](https://shikun.io/projects/prismer). 
+
+## 🛠 Skills
+Python, Pytorch, 2D Priors, CLIP, CLIP Loss, Prismer. 3D human full-body mesh reconstruction from single images,
+robustness to real-life corruption analysis, self-supervised refinement with CLIP Loss, multimodal learning.
+
+## 🔗 Links
+[Chengkun Li portfolio](https://charlieleee.github.io/)
+
+
+[![My portfolio](https://img.shields.io/badge/my_portfolio-000?style=for-the-badge&logo=ko-fi&logoColor=white)](https://eliafantini.github.io/Portfolio/)
+[![My linkedin](https://img.shields.io/badge/linkedin-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/-elia-fantini/)
+
