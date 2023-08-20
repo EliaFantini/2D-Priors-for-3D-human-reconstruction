@@ -24,7 +24,8 @@ In other words, we explore the possibility to enhance 3D generative performance 
 
 
 
-<img width="513" alt="image" src="https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/2924c8ae-f3e5-4c41-ae7a-f874812a2231">
+<img width="736" alt="image" src="https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/ec742316-5b99-44c3-9255-964bb8c962db">
+
 
 
 ## Quick presentation
