@@ -19,14 +19,13 @@ enhance the robustness of 3D generative models.
 
 In other words, we explore the possibility to enhance 3D generative performance by leveraging pretrained 2D priors, and investigate different integration techniques for best performance. 
 
-<center>
-<img width="469" alt="image" src="https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/8d1dc763-4e94-49fd-a215-655b519edcb3">
-</center>
+<img width="855" alt="image" src="https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/ffe6593c-7c71-4c58-bb78-19472dc8c2ea">
 
 
-<center>
+
+
 <img width="513" alt="image" src="https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/2924c8ae-f3e5-4c41-ae7a-f874812a2231">
-</center>
+
 
 ## Quick presentation
 
