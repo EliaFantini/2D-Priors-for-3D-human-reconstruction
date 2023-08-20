@@ -30,7 +30,8 @@ In other words, we explore the possibility to enhance 3D generative performance 
 
 ## Quick presentation
 
-![ezgif com-gif-maker](https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/445d6996-0e77-447d-a7dc-9c4e2ccedced)
+![ezgif com-gif-maker (1)](https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/assets/62103572/48d5dec3-c7a6-4de1-9932-8ea9a6d29534)
+
 
 For more detailed info please read the [report](https://github.com/EliaFantini/2D-Priors-for-3D-human-reconstruction/blob/main/report.pdf).
 
